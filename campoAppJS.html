@@ -1,0 +1,470 @@
+<script>
+
+
+/* =================================================================
+   CAMPO PWA -- Auth + Formulario + IndexedDB offline
+================================================================= */
+
+var CAMPO = {
+  BACKEND_URL: 'https://script.google.com/macros/s/AKfycbzV1R7PTCpE7SvB7uxO4d2N83bZbt0NjQ5d-6kONuv72XTTT5G8Jmg0lgkbOueMnji9/exec',
+  CLIENT_ID:   '337567650924-a16v6esls9fnsu323ndkt1le7abk3pgu.apps.googleusercontent.com'
+};
+
+/* ---- STATE ---- */
+var CS = {
+  user: null, step: 1, session: 0,
+  lat: null, lng: null,
+  endereco: '', bairro: '', cidade: '', pais: 'BR',
+  tipo: '', modalidade: '',
+  nomeLocal: '', nomeConc: '',
+  photoBlob: null, photoDataUrl: null,
+  obs: '',
+  records: []
+};
+
+/* ---- IndexedDB ---- */
+var _db = null;
+function cIDB() {
+  return new Promise(function(res, rej) {
+    var r = indexedDB.open('campo_pwa', 1);
+    r.onupgradeneeded = function(e) {
+      var d = e.target.result;
+      if (!d.objectStoreNames.contains('est')) {
+        d.createObjectStore('est', { keyPath: 'lid' });
+      }
+    };
+    r.onsuccess = function(e) { _db = e.target.result; res(); };
+    r.onerror   = rej;
+  });
+}
+function cPut(data) {
+  return new Promise(function(res, rej) {
+    var tx = _db.transaction('est', 'readwrite');
+    tx.objectStore('est').put(data);
+    tx.oncomplete = res; tx.onerror = rej;
+  });
+}
+function cGetAll() {
+  return new Promise(function(res, rej) {
+    var tx = _db.transaction('est', 'readonly');
+    var r  = tx.objectStore('est').getAll();
+    r.onsuccess = function() { res(r.result); }; r.onerror = rej;
+  });
+}
+
+/* ---- API GET (CORS-safe) ---- */
+function cApi(action, payload) {
+  var url = CAMPO.BACKEND_URL
+    + '?action=' + encodeURIComponent(action)
+    + '&d='      + encodeURIComponent(JSON.stringify(payload || {}));
+  return fetch(url, { method: 'GET' }).then(function(r) { return r.json(); });
+}
+
+/* ---- AUTH ---- */
+function cInitAuth() {
+  var s = document.createElement('script');
+  s.src = 'https://accounts.google.com/gsi/client';
+  s.onload = function() {
+    google.accounts.id.initialize({
+      client_id:            CAMPO.CLIENT_ID,
+      callback:             cOnGoogleLogin,
+      ux_mode:              'popup',
+      use_fedcm_for_prompt: false,
+      auto_select:          false
+    });
+  };
+  s.onerror = function() { cShowErr('Falha ao carregar SDK do Google.'); };
+  document.head.appendChild(s);
+
+  document.getElementById('clGoogleBtn').onclick = function() {
+    if (typeof google === 'undefined' || !google.accounts) {
+      cShowErr('SDK ainda carregando...'); return;
+    }
+    google.accounts.id.prompt(function(n) {
+      if (n.isNotDisplayed() || n.isSkippedMoment()) {
+        cShowErr('Nao foi possivel abrir o login. Tente recarregar.');
+      }
+    });
+  };
+}
+
+function cOnGoogleLogin(resp) {
+  var token = typeof resp === 'string' ? resp : (resp && resp.credential);
+  if (!token) { cShowErr('Falha no login.'); return; }
+
+  cApi('validateUser', { tokenId: token }).then(function(res) {
+    if (!res.ok) {
+      // Nao autorizado -- mostrar tela de solicitacao
+      cShowSolicitacao(token, res.email || '');
+      return;
+    }
+    CS.user = res;
+    CS.user.tokenId = token;
+    sessionStorage.setItem('campo_sess', JSON.stringify(CS.user));
+    cStartApp();
+  }).catch(function(e) { cShowErr('Erro de conexao: ' + e); });
+}
+
+function cShowErr(msg) {
+  var el = document.getElementById('clError');
+  el.textContent = msg; el.classList.add('visible');
+}
+
+function cRestoreSession() {
+  try {
+    var raw = sessionStorage.getItem('campo_sess');
+    if (raw) { CS.user = JSON.parse(raw); return true; }
+  } catch(e) {}
+  return false;
+}
+
+function cStartApp() {
+  document.getElementById('campoLogin').classList.add('hidden');
+  document.getElementById('fabCadastrar').classList.remove('hidden');
+  cLoadRecords();
+  window.addEventListener('online',  cSyncPendentes);
+  window.addEventListener('offline', function() {});
+  if (navigator.onLine) cSyncPendentes();
+}
+
+/* ---- SOLICITACAO DE ACESSO ---- */
+var _pendToken = null, _pendEmail = null;
+function cShowSolicitacao(token, email) {
+  _pendToken = token; _pendEmail = email;
+  var login = document.getElementById('campoLogin');
+  login.innerHTML = '<div class="cl-logo"><svg viewBox="0 0 24 24" style="fill:white;width:36px;height:36px"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg></div>'
+    + '<div class="cl-title" style="font-size:20px">Acesso nao autorizado</div>'
+    + '<div class="cl-sub">Seu email nao esta cadastrado.<br>Solicite acesso abaixo.</div>'
+    + '<div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px">'
+    + '<input type="text" id="solNome" placeholder="Seu nome completo" style="padding:13px;border-radius:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:white;font-size:14px;outline:none">'
+    + '<input type="text" id="solCidade" placeholder="Cidade de atuacao" style="padding:13px;border-radius:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:white;font-size:14px;outline:none">'
+    + '<button onclick="cEnviarSolicitacao()" style="padding:14px;border-radius:10px;background:#2563eb;color:white;font-size:15px;font-weight:700;border:none;cursor:pointer">Solicitar acesso</button>'
+    + '<button onclick="location.reload()" style="padding:10px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:13px;cursor:pointer">Usar outra conta</button>'
+    + '</div>'
+    + '<div id="solMsg" style="font-size:13px;text-align:center;color:rgba(255,255,255,.6)"></div>'
+    + '<div style="font-size:11px;color:rgba(255,255,255,.3)">' + email + '</div>';
+}
+function cEnviarSolicitacao() {
+  var nome   = (document.getElementById('solNome')   || {}).value || '';
+  var cidade = (document.getElementById('solCidade') || {}).value || '';
+  if (!nome.trim()) { cShowErr('Informe seu nome.'); return; }
+  cApi('solicitarAcesso', { email: _pendEmail, nome: nome.trim(), cidade: cidade.trim(), pais: 'BR' })
+    .then(function(res) {
+      var msg = document.getElementById('solMsg');
+      if (msg) msg.textContent = res.msg || (res.ok ? 'Solicitacao enviada!' : 'Erro: ' + res.error);
+    }).catch(function() {});
+}
+
+/* ---- RECORDS / SYNC ---- */
+function cLoadRecords() {
+  cGetAll().then(function(recs) {
+    CS.records = (recs || []).sort(function(a,b){ return b.cat - a.cat; });
+    cUpdatePendBanner();
+  }).catch(function() {});
+}
+
+function cUpdatePendBanner() {
+  var pend = (CS.records || []).filter(function(r){ return r.sync === 'PENDING'; });
+  var banner = document.getElementById('campoPendBanner');
+  var badge  = document.getElementById('fabBadge');
+  if (pend.length > 0) {
+    banner.classList.add('visible');
+    document.getElementById('cpbCount').textContent = pend.length + ' pendente(s)';
+    badge.textContent = pend.length; badge.classList.add('visible');
+  } else {
+    banner.classList.remove('visible'); badge.classList.remove('visible');
+  }
+}
+
+function cSyncPendentes() {
+  if (!CS.user) return;
+  var pend = (CS.records || []).filter(function(r){ return r.sync === 'PENDING'; });
+  if (!pend.length) return;
+
+  Promise.all(pend.map(function(r) {
+    var payload = {
+      tokenId: CS.user.tokenId,
+      lat: r.lat, lng: r.lng,
+      tipo: r.tipo, modalidade: r.modalidade || '',
+      nomeConcorrente: r.nomeConc || '', observacoes: r.obs || '',
+      geo: { cidade: r.cidade, bairro: r.bairro, endereco: r.end, pais: r.pais || 'BR' },
+      operador: CS.user.email, origem: 'PWA_CAMPO',
+      foto: r.photoB64 ? { base64: r.photoB64, mime: r.photoMime || 'image/jpeg', name: 'foto.jpg' } : null
+    };
+    return cApi('addEstacaoFromMapa', payload).then(function(res) {
+      if (res.ok) {
+        r.sync = 'SYNCED';
+        return cPut(r);
+      }
+    }).catch(function(){});
+  })).then(function() { cLoadRecords(); });
+}
+
+document.getElementById('cpbSyncBtn').onclick = cSyncPendentes;
+
+/* ---- DRAWER ---- */
+document.getElementById('fabCadastrar').onclick = function() { cOpenDrawer(); };
+document.getElementById('drawerClose').onclick  = function() { cCloseDrawer(); };
+document.getElementById('drawerOverlay').onclick = function() { cCloseDrawer(); };
+
+function cOpenDrawer() { cResetForm(); document.getElementById('campoDrawer').classList.add('open'); }
+function cCloseDrawer() { document.getElementById('campoDrawer').classList.remove('open'); }
+
+/* ---- FORM STEPS ---- */
+function dGoNext() {
+  if (!dValidate(CS.step)) return;
+  if (CS.step === 4) { cSubmit(); return; }
+  CS.step++;
+  dRenderStep(CS.step);
+}
+function dGoBack() {
+  if (CS.step <= 1) return;
+  CS.step--;
+  dRenderStep(CS.step);
+}
+
+function dRenderStep(n) {
+  for (var i = 1; i <= 4; i++) {
+    var p = document.getElementById('ds' + i);
+    if (p) p.className = 'd-step' + (i === n ? ' active' : '');
+    var sn = document.getElementById('dsn' + i);
+    if (sn) {
+      sn.className = 'd-sn' + (i < n ? ' done' : i === n ? ' active' : '');
+      sn.textContent = i < n ? 'ok' : i;
+    }
+    if (i <= 3) {
+      var sl = document.getElementById('dsl' + i);
+      if (sl) sl.className = 'd-line' + (i < n ? ' done' : '');
+    }
+  }
+  var back = document.getElementById('dBtnBack');
+  var next = document.getElementById('dBtnNext');
+  if (back) back.style.display = n > 1 ? 'flex' : 'none';
+  if (next) {
+    if (n === 4) {
+      next.textContent = 'Confirmar';
+      next.className = 'd-btn d-btn-success';
+    } else {
+      next.textContent = 'Proximo';
+      next.className = 'd-btn d-btn-primary';
+    }
+  }
+  if (n === 4) dPopulateReview();
+}
+
+function dValidate(n) {
+  if (n === 1 && (!CS.lat || !CS.lng)) { cToast('Obtenha o GPS antes de continuar', 'error'); return false; }
+  if (n === 2) {
+    if (!CS.tipo) { cToast('Selecione o tipo', 'error'); return false; }
+    if (CS.tipo === 'CONCORRENTE') {
+      CS.nomeConc = (document.getElementById('dNomeConc').value || '').trim();
+      if (!CS.nomeConc) { cToast('Informe o nome do concorrente', 'error'); return false; }
+    }
+    CS.nomeLocal = (document.getElementById('dNomeLocal').value || '').trim();
+    CS.modalidade = dGetPill('modal') || 'CALCADA';
+  }
+  if (n === 3) {
+    CS.obs = (document.getElementById('dObs').value || '').trim();
+  }
+  return true;
+}
+
+function dSelectTipo(el) {
+  document.querySelectorAll('.d-type-card').forEach(function(c){ c.classList.remove('selected'); });
+  el.classList.add('selected');
+  CS.tipo = el.dataset.tipo;
+  document.getElementById('dSubPublica').className  = 'd-sub-wrap' + (CS.tipo === 'PUBLICA'     ? ' visible' : '');
+  document.getElementById('dSubPrivada').className  = 'd-sub-wrap' + (CS.tipo === 'PRIVADA'     ? ' visible' : '');
+  document.getElementById('dSubConc').className     = 'd-sub-wrap' + (CS.tipo === 'CONCORRENTE' ? ' visible' : '');
+}
+
+function dSelectPill(el, group) {
+  var row = el.closest('.d-pill-row');
+  if (row) row.querySelectorAll('.d-pill').forEach(function(p){ p.classList.remove('selected'); });
+  el.classList.add('selected');
+}
+function dGetPill(group) {
+  var sel = document.querySelector('.d-pill.selected');
+  return sel ? sel.dataset.val : '';
+}
+
+/* ---- GPS ---- */
+document.getElementById('dGpsBtn').onclick = function() {
+  var btn = this;
+  btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;animation:spin .8s linear infinite"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg> Localizando...';
+  btn.style.pointerEvents = 'none';
+
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    CS.lat = pos.coords.latitude; CS.lng = pos.coords.longitude;
+    var el = document.getElementById('dGeoCoords');
+    if (el) { el.textContent = CS.lat.toFixed(6) + ', ' + CS.lng.toFixed(6); el.classList.remove('loading'); }
+    var elE = document.getElementById('dGeoEnd');
+    var elB = document.getElementById('dGeoBairro');
+    if (elE) { elE.textContent = 'Buscando...'; elE.classList.add('loading'); }
+    if (elB) { elB.textContent = '...'; }
+    cReverseGeocode(CS.lat, CS.lng);
+    btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> GPS obtido';
+    btn.className = 'd-gps-btn got';
+    btn.style.pointerEvents = 'auto';
+  }, function(err) {
+    cToast('Erro GPS: ' + err.message, 'error');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4z"/></svg> Tentar novamente';
+    btn.className = 'd-gps-btn';
+    btn.style.pointerEvents = 'auto';
+  }, { enableHighAccuracy: true, timeout: 12000 });
+};
+
+/* ---- BUSCA MANUAL ---- */
+document.getElementById('dBuscarBtn').onclick = function() {
+  var q = (document.getElementById('dEndBusca').value || '').trim();
+  if (!q) return;
+  cApi('geocodeEndereco', { endereco: q }).then(function(res) {
+    if (!res.ok || !res.lat) { cToast('Endereco nao encontrado', 'error'); return; }
+    CS.lat = res.lat; CS.lng = res.lng;
+    CS.endereco = res.endereco || q; CS.bairro = res.bairro || ''; CS.cidade = res.cidade || ''; CS.pais = res.pais || 'BR';
+    var elE = document.getElementById('dGeoEnd'); var elB = document.getElementById('dGeoBairro'); var elC = document.getElementById('dGeoCoords');
+    if (elE) { elE.textContent = CS.endereco; elE.classList.remove('loading'); }
+    if (elB) { elB.textContent = [CS.bairro, CS.cidade].filter(Boolean).join(' / ') || '--'; elB.classList.remove('loading'); }
+    if (elC) { elC.textContent = CS.lat.toFixed(5) + ', ' + CS.lng.toFixed(5); elC.classList.remove('loading'); }
+    // Mover o mapa principal para a localizacao
+    try { if (window.map) { window.map.panTo({lat: CS.lat, lng: CS.lng}); window.map.setZoom(17); } } catch(e) {}
+  }).catch(function() { cToast('Erro ao buscar', 'error'); });
+};
+document.getElementById('dEndBusca').onkeydown = function(e) { if (e.key === 'Enter') document.getElementById('dBuscarBtn').click(); };
+
+function cReverseGeocode(lat, lng) {
+  cApi('reverseGeocodePWA', { lat: lat, lng: lng }).then(function(res) {
+    if (!res.ok || !res.geo) return;
+    CS.endereco = res.geo.endereco || ''; CS.bairro = res.geo.bairro || ''; CS.cidade = res.geo.cidade || ''; CS.pais = res.geo.pais || 'BR';
+    var elE = document.getElementById('dGeoEnd'); var elB = document.getElementById('dGeoBairro');
+    if (elE) { elE.textContent = CS.endereco || '--'; elE.classList.remove('loading'); }
+    if (elB) { elB.textContent = [CS.bairro, CS.cidade].filter(Boolean).join(' / ') || '--'; elB.classList.remove('loading'); }
+  }).catch(function(){});
+}
+
+/* ---- FOTO ---- */
+document.getElementById('dPhotoInput').onchange = function(e) {
+  var file = e.target.files && e.target.files[0];
+  if (!file) return;
+  var canvas = document.createElement('canvas');
+  var img = new Image();
+  var url = URL.createObjectURL(file);
+  img.onload = function() {
+    var maxW = 1200, w = img.width, h = img.height;
+    if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    canvas.toBlob(function(blob) {
+      URL.revokeObjectURL(url);
+      CS.photoBlob = blob;
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        CS.photoDataUrl = ev.target.result;
+        var prev = document.getElementById('dPhotoPreview');
+        prev.src = CS.photoDataUrl; prev.classList.add('visible');
+        document.getElementById('dPhotoArea').classList.add('has-photo');
+        document.getElementById('dPhotoPh').classList.add('hidden');
+      };
+      reader.readAsDataURL(blob);
+    }, 'image/jpeg', 0.75);
+  };
+  img.src = url;
+};
+
+/* ---- REVIEW ---- */
+function dPopulateReview() {
+  function st(id, v) { var el = document.getElementById(id); if (el) el.textContent = v || '--'; }
+  st('dRvEnd', CS.endereco); st('dRvBairro', CS.bairro); st('dRvCidade', CS.cidade); st('dRvTipo', CS.tipo);
+  var det = CS.tipo === 'PUBLICA' ? (CS.modalidade || '--') : CS.tipo === 'PRIVADA' ? (CS.nomeLocal || '--') : (CS.nomeConc || '--');
+  st('dRvDetalhe', det);
+  st('dRvCoords', CS.lat ? CS.lat.toFixed(5) + ', ' + CS.lng.toFixed(5) : '--');
+  var rp = document.getElementById('dRvPhoto');
+  if (rp && CS.photoDataUrl) { rp.src = CS.photoDataUrl; rp.classList.add('visible'); }
+}
+
+/* ---- SUBMIT ---- */
+async function cSubmit() {
+  var btn = document.getElementById('dBtnNext');
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+
+  var lid = 'L' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+  var photoB64 = null, photoMime = null;
+  if (CS.photoDataUrl) { photoB64 = CS.photoDataUrl.split(',')[1]; photoMime = 'image/jpeg'; }
+
+  var rec = {
+    lid: lid, lat: CS.lat, lng: CS.lng,
+    end: CS.endereco, bairro: CS.bairro, cidade: CS.cidade, pais: CS.pais,
+    tipo: CS.tipo, modalidade: CS.modalidade, nomeConc: CS.nomeConc, nomeLocal: CS.nomeLocal,
+    obs: CS.obs, photoB64: photoB64, photoMime: photoMime,
+    operador: CS.user && CS.user.email,
+    cat: Date.now(), sync: 'PENDING'
+  };
+
+  await cPut(rec);
+  CS.session++;
+
+  if (navigator.onLine && CS.user) {
+    try {
+      var payload = {
+        tokenId: CS.user.tokenId, lat: rec.lat, lng: rec.lng,
+        tipo: rec.tipo, modalidade: rec.modalidade || '',
+        nomeConcorrente: rec.nomeConc || '', observacoes: rec.obs || '',
+        geo: { cidade: rec.cidade, bairro: rec.bairro, endereco: rec.end, pais: rec.pais },
+        operador: CS.user.email, origem: 'PWA_CAMPO',
+        foto: rec.photoB64 ? { base64: rec.photoB64, mime: rec.photoMime, name: 'foto.jpg' } : null
+      };
+      var res = await cApi('addEstacaoFromMapa', payload);
+      if (res.ok) { rec.sync = 'SYNCED'; await cPut(rec); }
+    } catch(e) {}
+  }
+
+  await cLoadRecords();
+  cCloseDrawer();
+  document.getElementById('csCod').textContent = lid;
+  document.getElementById('campoSuccess').classList.add('visible');
+  if (btn) { btn.disabled = false; btn.textContent = 'Confirmar'; }
+}
+
+function dNovoRegistro() { document.getElementById('campoSuccess').classList.remove('visible'); cOpenDrawer(); }
+function dFecharSuccess() { document.getElementById('campoSuccess').classList.remove('visible'); }
+
+function cResetForm() {
+  CS.step = 1; CS.lat = null; CS.lng = null;
+  CS.endereco = ''; CS.bairro = ''; CS.cidade = ''; CS.pais = 'BR';
+  CS.tipo = ''; CS.modalidade = ''; CS.nomeLocal = ''; CS.nomeConc = '';
+  CS.photoBlob = null; CS.photoDataUrl = null; CS.obs = '';
+  var gpsBtn = document.getElementById('dGpsBtn');
+  if (gpsBtn) { gpsBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06z"/></svg> Usar minha localizacao'; gpsBtn.className = 'd-gps-btn'; }
+  ['dGeoEnd','dGeoBairro','dGeoCoords'].forEach(function(id){ var el = document.getElementById(id); if(el){el.textContent='--';el.classList.add('loading');} });
+  document.querySelectorAll('.d-type-card').forEach(function(c){ c.classList.remove('selected'); });
+  document.querySelectorAll('.d-pill').forEach(function(p){ p.classList.remove('selected'); });
+  ['dSubPublica','dSubPrivada','dSubConc'].forEach(function(id){ var el = document.getElementById(id); if(el) el.className='d-sub-wrap'; });
+  var ph = document.getElementById('dPhotoInput'); if(ph) ph.value='';
+  var pp = document.getElementById('dPhotoPreview'); if(pp){pp.classList.remove('visible');pp.src='';}
+  var pa = document.getElementById('dPhotoArea'); if(pa) pa.classList.remove('has-photo');
+  var pph = document.getElementById('dPhotoPh'); if(pph) pph.classList.remove('hidden');
+  var obs = document.getElementById('dObs'); if(obs) obs.value='';
+  dRenderStep(1);
+}
+
+/* ---- TOAST ---- */
+var _cToastT = null;
+function cToast(msg, type) {
+  var el = document.getElementById('campoToast');
+  el.textContent = msg; el.className = 'show' + (type ? ' '+type : '');
+  clearTimeout(_cToastT);
+  _cToastT = setTimeout(function(){ el.classList.remove('show'); }, 3000);
+}
+
+/* ---- BOOT ---- */
+cIDB().then(function() {
+  if (cRestoreSession()) {
+    cStartApp();
+    document.getElementById('campoLogin').classList.add('hidden');
+  } else {
+    cInitAuth();
+  }
+}).catch(function() { cInitAuth(); });
+
+
+</script>
