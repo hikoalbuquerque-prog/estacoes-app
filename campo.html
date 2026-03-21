@@ -1,0 +1,1945 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0A0E1A">
+<title>Estações -- Campo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* -----------------------------------------------
+   TOKENS
+----------------------------------------------- */
+:root {
+  --bg:       #0A0E1A;
+  --surface:  #111827;
+  --border:   #1E2D45;
+  --border2:  #253550;
+  --accent:   #3B82F6;
+  --accent2:  #60A5FA;
+  --green:    #22C55E;
+  --amber:    #F59E0B;
+  --red:      #EF4444;
+  --purple:   #A78BFA;
+  --txt:      #F1F5F9;
+  --txt2:     #94A3B8;
+  --txt3:     #64748B;
+  --mono:     'DM Mono', monospace;
+  --display:  'Syne', sans-serif;
+  --body:     'Inter', sans-serif;
+  --r:        14px;
+  --r2:       10px;
+  --sh:       0 4px 24px rgba(0,0,0,.5);
+}
+
+/* -----------------------------------------------
+   RESET
+----------------------------------------------- */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:var(--body);font-size:15px;-webkit-font-smoothing:antialiased}
+input,textarea,select,button{font:inherit;color:inherit;background:none;border:none;outline:none}
+button{cursor:pointer}
+img{display:block;max-width:100%}
+
+/* -----------------------------------------------
+   LOADER
+----------------------------------------------- */
+#loader{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;transition:opacity .4s}
+#loader.out{opacity:0;pointer-events:none}
+.loader-ring{width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+.loader-label{font-family:var(--mono);font-size:11px;color:var(--txt3);letter-spacing:.15em;text-transform:uppercase}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* -----------------------------------------------
+   APP SHELL
+----------------------------------------------- */
+#app{width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden}
+#app.hidden{display:none}
+
+/* -- TOP BAR -- */
+#topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px 10px;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  position:relative;z-index:100;
+  flex-shrink:0;
+}
+.topbar-brand{display:flex;align-items:center;gap:10px}
+.brand-icon{width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center}
+.brand-icon svg{width:18px;height:18px;fill:white}
+.brand-name{font-family:var(--display);font-size:16px;font-weight:700;letter-spacing:-.01em}
+.brand-badge{font-family:var(--mono);font-size:9px;color:var(--accent2);letter-spacing:.1em;text-transform:uppercase;margin-top:1px}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.sync-pill{
+  display:flex;align-items:center;gap:5px;
+  padding:4px 10px;border-radius:20px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.05em;
+  transition:.2s;
+}
+.sync-pill.online{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.sync-pill.offline{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+.sync-pill.syncing{background:rgba(59,130,246,.12);color:var(--accent2);border:1px solid rgba(59,130,246,.3);animation:pulse 1s ease infinite}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.avatar-btn{width:32px;height:32px;border-radius:50%;background:var(--border);overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:13px;font-weight:700;color:var(--txt2)}
+.avatar-btn img{width:100%;height:100%;object-fit:cover}
+
+/* -- PENDING BANNER -- */
+#pendingBanner{
+  display:none;align-items:center;justify-content:space-between;
+  padding:8px 16px;
+  background:rgba(245,158,11,.08);
+  border-bottom:1px solid rgba(245,158,11,.2);
+  font-size:12px;color:var(--amber);
+  flex-shrink:0;
+}
+#pendingBanner.visible{display:flex}
+.pending-txt{display:flex;align-items:center;gap:6px}
+.sync-now-btn{font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:6px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:var(--amber);letter-spacing:.05em;text-transform:uppercase;transition:.2s}
+.sync-now-btn:active{background:rgba(245,158,11,.25)}
+
+/* -- NAV -- */
+#nav{
+  display:flex;background:var(--surface);
+  border-top:1px solid var(--border);
+  flex-shrink:0;
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.nav-tab{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:10px 0;
+  font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--txt3);transition:.15s;
+  position:relative;
+}
+.nav-tab.active{color:var(--accent2)}
+.nav-tab.active::before{
+  content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:32px;height:2px;background:var(--accent);border-radius:0 0 3px 3px;
+}
+.nav-icon{width:22px;height:22px}
+.nav-badge{
+  position:absolute;top:6px;right:calc(50% - 20px);
+  min-width:16px;height:16px;border-radius:8px;
+  background:var(--red);color:white;
+  font-family:var(--mono);font-size:9px;padding:0 4px;
+  display:flex;align-items:center;justify-content:center;
+  display:none;
+}
+.nav-badge.visible{display:flex}
+
+/* -- VIEWS -- */
+#views{flex:1;overflow:hidden;position:relative}
+.view{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;display:none;flex-direction:column;-webkit-overflow-scrolling:touch}
+.view.active{display:flex}
+.view-content{padding:16px;display:flex;flex-direction:column;gap:16px;flex:1}
+
+/* -- CARDS -- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.card-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 12px;border-bottom:1px solid var(--border)}
+.card-title{font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--txt2)}
+.card-body{padding:16px}
+
+/* -----------------------------------------------
+   LOGIN SCREEN
+----------------------------------------------- */
+#loginScreen{
+  position:fixed;inset:0;z-index:500;
+  background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:24px;
+  gap:0;
+}
+#loginScreen.hidden{display:none}
+#accessScreen{position:fixed;inset:0;z-index:500;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:16px;}
+#accessScreen.hidden{display:none}
+.login-hero{
+  width:72px;height:72px;background:var(--accent);border-radius:20px;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:24px;
+  box-shadow:0 0 0 1px rgba(59,130,246,.3), 0 8px 32px rgba(59,130,246,.25);
+}
+.login-hero svg{width:40px;height:40px;fill:white}
+.login-title{font-family:var(--display);font-size:28px;font-weight:800;text-align:center;margin-bottom:8px;letter-spacing:-.02em}
+.login-sub{font-size:14px;color:var(--txt2);text-align:center;margin-bottom:40px;line-height:1.5}
+.google-btn{
+  display:flex;align-items:center;gap:12px;
+  width:100%;max-width:320px;
+  padding:14px 20px;
+  background:white;color:#1F2937;
+  border-radius:var(--r);
+  font-size:15px;font-weight:600;
+  box-shadow:var(--sh);
+  transition:.2s;
+  justify-content:center;
+}
+.google-btn:active{transform:scale(.98)}
+.google-btn svg{width:20px;height:20px;flex-shrink:0}
+.login-footer{margin-top:32px;font-family:var(--mono);font-size:10px;color:var(--txt3);text-align:center;letter-spacing:.05em}
+#loginError{
+  margin-top:16px;padding:12px 16px;
+  background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:var(--r2);
+  font-size:13px;color:var(--red);text-align:center;
+  display:none;
+}
+#loginError.visible{display:block}
+
+/* -----------------------------------------------
+   DASHBOARD (HOME)
+----------------------------------------------- */
+.greeting{padding:4px 0}
+.greeting-label{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+.greeting-name{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:-.02em}
+.greeting-role{display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:3px 10px;border-radius:20px;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase}
+.role-CAMPO{background:rgba(59,130,246,.12);color:var(--accent2);border:1px solid rgba(59,130,246,.2)}
+.role-SUPERVISOR{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.role-OPERACOES,.role-ADMIN{background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.2)}
+
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kpi-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px;display:flex;flex-direction:column;gap:4px;
+  position:relative;overflow:hidden;
+}
+.kpi-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+}
+.kpi-card.blue::before{background:var(--accent)}
+.kpi-card.green::before{background:var(--green)}
+.kpi-card.amber::before{background:var(--amber)}
+.kpi-card.purple::before{background:var(--purple)}
+.kpi-value{font-family:var(--display);font-size:28px;font-weight:800;line-height:1;letter-spacing:-.02em}
+.kpi-label{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.1em;text-transform:uppercase;margin-top:2px}
+
+.activity-list{display:flex;flex-direction:column;gap:1px}
+.activity-item{
+  display:flex;align-items:center;gap:12px;
+  padding:11px 16px;
+  border-bottom:1px solid var(--border);
+  transition:.15s;
+}
+.activity-item:last-child{border-bottom:none}
+.activity-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot-PUBLICA{background:var(--green)}
+.dot-PRIVADA{background:var(--accent)}
+.dot-CONCORRENTE{background:var(--amber)}
+.dot-PENDENTE{background:var(--txt3)}
+.activity-info{flex:1;min-width:0}
+.activity-addr{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.activity-meta{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:2px}
+.activity-time{font-family:var(--mono);font-size:10px;color:var(--txt3);flex-shrink:0}
+.status-chip{
+  padding:2px 7px;border-radius:4px;
+  font-family:var(--mono);font-size:9px;letter-spacing:.05em;text-transform:uppercase;
+  flex-shrink:0;
+}
+.chip-ok{background:rgba(34,197,94,.1);color:var(--green)}
+.chip-pending{background:rgba(245,158,11,.1);color:var(--amber)}
+.chip-sync{background:rgba(59,130,246,.1);color:var(--accent2)}
+
+/* -----------------------------------------------
+   FORM -- MULTI-STEP
+----------------------------------------------- */
+#formView{background:var(--bg)}
+
+/* Step indicator */
+.step-bar{
+  display:flex;align-items:center;
+  padding:14px 16px;gap:8px;
+  flex-shrink:0;
+}
+.step-item{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.step-num{
+  width:26px;height:26px;border-radius:50%;border:2px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:11px;color:var(--txt3);
+  flex-shrink:0;transition:.3s;
+}
+.step-num.active{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+.step-num.done{background:var(--accent);border-color:var(--accent);color:white}
+.step-line{flex:1;height:1px;background:var(--border2);transition:.3s}
+.step-line.done{background:var(--accent)}
+.step-item:last-child .step-line{display:none}
+
+/* Steps container */
+.steps-wrap{flex:1;overflow:hidden;position:relative}
+.step-panel{
+  position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:8px 16px 100px;
+  display:flex;flex-direction:column;gap:16px;
+  transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);
+  opacity:0;pointer-events:none;
+}
+.step-panel.active{transform:translateX(0);opacity:1;pointer-events:all}
+.step-panel.exit-left{transform:translateX(-100%);opacity:0}
+
+.step-heading{
+  font-family:var(--display);font-size:20px;font-weight:800;
+  letter-spacing:-.02em;margin-bottom:2px;
+}
+.step-sub{font-size:13px;color:var(--txt2);line-height:1.5}
+
+/* Map mini */
+#miniMap{
+  width:100%;height:200px;border-radius:var(--r);overflow:hidden;
+  background:var(--surface);border:1px solid var(--border);
+  position:relative;
+}
+#miniMap iframe{width:100%;height:100%;border:none}
+.map-overlay{
+  position:absolute;inset:0;background:rgba(10,14,26,.7);
+  display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:8px;
+  font-family:var(--mono);font-size:11px;color:var(--txt2);letter-spacing:.1em;text-transform:uppercase;
+}
+.map-overlay.hidden{display:none}
+.map-spinner{width:24px;height:24px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+
+/* Geo card */
+.geo-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px;display:flex;flex-direction:column;gap:10px;
+}
+.geo-row{display:flex;align-items:flex-start;gap:10px}
+.geo-icon{width:16px;height:16px;flex-shrink:0;margin-top:1px;fill:var(--txt3)}
+.geo-label{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:1px}
+.geo-value{font-size:13px;font-weight:500;min-height:18px}
+.geo-value.loading{color:var(--txt3);font-style:italic}
+
+/* GPS btn */
+.gps-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:14px;border-radius:var(--r);
+  background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);
+  color:var(--accent2);font-size:14px;font-weight:600;
+  transition:.2s;
+}
+.gps-btn:active{background:rgba(59,130,246,.2)}
+.gps-btn.loading{opacity:.7;pointer-events:none}
+.gps-btn svg{width:18px;height:18px;fill:currentColor;flex-shrink:0}
+
+/* Type cards */
+.type-grid{display:flex;flex-direction:column;gap:10px}
+.type-card{
+  display:flex;align-items:center;gap:16px;
+  padding:16px;border-radius:var(--r);
+  background:var(--surface);border:2px solid var(--border);
+  transition:.15s;cursor:pointer;
+  position:relative;overflow:hidden;
+}
+.type-card.selected{border-color:var(--accent)}
+.type-card.selected::before{content:'';position:absolute;inset:0;background:rgba(59,130,246,.06)}
+.type-icon{
+  width:44px;height:44px;border-radius:12px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.type-icon svg{width:24px;height:24px}
+.type-PUBLICA .type-icon{background:rgba(34,197,94,.12)}
+.type-PUBLICA .type-icon svg{fill:var(--green)}
+.type-PRIVADA .type-icon{background:rgba(59,130,246,.12)}
+.type-PRIVADA .type-icon svg{fill:var(--accent2)}
+.type-CONCORRENTE .type-icon{background:rgba(245,158,11,.1)}
+.type-CONCORRENTE .type-icon svg{fill:var(--amber)}
+.type-label{font-family:var(--display);font-size:16px;font-weight:700}
+.type-desc{font-size:12px;color:var(--txt2);margin-top:2px;line-height:1.4}
+.type-check{
+  position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  width:20px;height:20px;border-radius:50%;
+  background:var(--accent);
+  display:none;align-items:center;justify-content:center;
+}
+.type-card.selected .type-check{display:flex}
+.type-check svg{width:12px;height:12px;stroke:white;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+
+/* Subtypes */
+.subtype-wrap{display:none;flex-direction:column;gap:8px;padding-top:4px}
+.subtype-wrap.visible{display:flex}
+.subtype-label{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.1em;text-transform:uppercase;padding:0 2px}
+.pill-row{display:flex;gap:8px;flex-wrap:wrap}
+.pill{
+  padding:8px 16px;border-radius:20px;
+  font-size:13px;font-weight:500;
+  background:var(--surface);border:1px solid var(--border2);
+  color:var(--txt2);transition:.15s;cursor:pointer;
+}
+.pill.selected{background:rgba(59,130,246,.12);border-color:var(--accent);color:var(--accent2)}
+
+/* Form fields */
+.field-group{display:flex;flex-direction:column;gap:6px}
+.field-label{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.1em;text-transform:uppercase}
+.field-input{
+  width:100%;padding:13px 14px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+  font-size:14px;color:var(--txt);
+  transition:.2s;
+}
+.field-input:focus{border-color:var(--accent);background:rgba(59,130,246,.04)}
+.field-input::placeholder{color:var(--txt3)}
+.field-input.error{border-color:var(--red)}
+.field-error{font-size:11px;color:var(--red);margin-top:2px;display:none}
+.field-error.visible{display:block}
+textarea.field-input{resize:none;min-height:80px;line-height:1.5}
+
+/* Photo */
+.photo-area{
+  width:100%;border-radius:var(--r);
+  background:var(--surface);border:2px dashed var(--border2);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;padding:32px 20px;cursor:pointer;
+  transition:.2s;position:relative;overflow:hidden;
+  min-height:180px;
+}
+.photo-area.has-photo{border-style:solid;border-color:var(--border);padding:0}
+.photo-area:active{background:rgba(59,130,246,.05)}
+.photo-preview{width:100%;height:220px;object-fit:cover;display:none;border-radius:calc(var(--r) - 2px)}
+.photo-preview.visible{display:block}
+.photo-placeholder{display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+.photo-placeholder.hidden{display:none}
+.photo-icon{width:40px;height:40px;fill:var(--txt3)}
+.photo-hint{font-size:13px;color:var(--txt2);font-weight:500}
+.photo-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.05em}
+.photo-retake{
+  position:absolute;bottom:10px;right:10px;
+  padding:7px 12px;border-radius:8px;
+  background:rgba(10,14,26,.7);backdrop-filter:blur(8px);
+  font-family:var(--mono);font-size:10px;letter-spacing:.05em;
+  color:var(--txt2);border:1px solid var(--border2);
+  display:none;
+}
+.photo-area.has-photo .photo-retake{display:block}
+#photoInput{position:absolute;inset:0;opacity:0;cursor:pointer}
+.photo-quality{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--txt2)}
+.quality-bar{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.quality-fill{height:100%;background:var(--green);border-radius:2px;width:0%;transition:.5s}
+
+/* Review */
+.review-section{display:flex;flex-direction:column;gap:1px;border-radius:var(--r);overflow:hidden;background:var(--surface);border:1px solid var(--border)}
+.review-row{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 14px;gap:12px;border-bottom:1px solid var(--border)}
+.review-row:last-child{border-bottom:none}
+.review-key{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.08em;text-transform:uppercase;flex-shrink:0;padding-top:1px}
+.review-val{font-size:13px;font-weight:500;text-align:right;word-break:break-word}
+.review-photo{width:100%;height:140px;object-fit:cover;border-radius:var(--r2);display:none}
+.review-photo.visible{display:block}
+.review-map{width:100%;height:140px;border-radius:var(--r2);overflow:hidden;background:var(--surface);border:1px solid var(--border)}
+.review-map iframe{width:100%;height:100%;border:none}
+
+/* Bottom actions */
+.step-actions{
+  position:fixed;bottom:0;left:0;right:0;
+  padding:12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  background:linear-gradient(to top, var(--bg) 70%, transparent);
+  display:flex;gap:10px;z-index:50;
+}
+.btn{
+  padding:15px 20px;border-radius:var(--r);font-size:15px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  transition:.15s;user-select:none;
+}
+.btn:active{transform:scale(.98)}
+.btn-primary{background:var(--accent);color:white;flex:1;box-shadow:0 4px 16px rgba(59,130,246,.3)}
+.btn-primary:active{background:#2563EB}
+.btn-primary:disabled{opacity:.5;pointer-events:none}
+.btn-ghost{background:var(--surface);border:1px solid var(--border);color:var(--txt2);padding-left:16px;padding-right:16px}
+.btn-success{background:var(--green);color:white;flex:1;box-shadow:0 4px 16px rgba(34,197,94,.25)}
+.btn svg{width:18px;height:18px;fill:currentColor;flex-shrink:0}
+
+/* -----------------------------------------------
+   HISTORY VIEW
+----------------------------------------------- */
+.history-filter{
+  display:flex;gap:6px;padding:12px 16px;overflow-x:auto;
+  scrollbar-width:none;flex-shrink:0;
+}
+.history-filter::-webkit-scrollbar{display:none}
+.filter-chip{
+  padding:6px 14px;border-radius:20px;white-space:nowrap;
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  background:var(--surface);border:1px solid var(--border);color:var(--txt3);
+  transition:.15s;cursor:pointer;flex-shrink:0;
+}
+.filter-chip.active{background:rgba(59,130,246,.1);border-color:var(--accent);color:var(--accent2)}
+.history-list{display:flex;flex-direction:column;gap:8px;padding:8px 16px 100px}
+.hist-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;display:flex;flex-direction:column;
+}
+.hist-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 10px}
+.hist-tipo{display:flex;align-items:center;gap:8px}
+.hist-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.hist-cod{font-family:var(--mono);font-size:11px;color:var(--txt2)}
+.hist-addr{font-size:13px;font-weight:500;padding:0 14px;margin-bottom:8px;line-height:1.4}
+.hist-foot{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 14px;border-top:1px solid var(--border);
+  font-family:var(--mono);font-size:10px;color:var(--txt3);
+}
+.hist-pending-badge{
+  display:flex;align-items:center;gap:4px;
+  padding:2px 7px;border-radius:4px;
+  background:rgba(245,158,11,.1);color:var(--amber);
+  font-family:var(--mono);font-size:9px;
+}
+
+/* -----------------------------------------------
+   SUCCESS OVERLAY
+----------------------------------------------- */
+#successOverlay{
+  position:fixed;inset:0;z-index:400;
+  background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;padding:24px;
+  opacity:0;pointer-events:none;transition:.4s;
+}
+#successOverlay.visible{opacity:1;pointer-events:all}
+.success-icon{
+  width:80px;height:80px;border-radius:24px;background:var(--green);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 1px rgba(34,197,94,.3),0 8px 32px rgba(34,197,94,.2);
+  animation:scaleIn .4s cubic-bezier(.34,1.56,.64,1);
+}
+.success-icon svg{width:44px;height:44px;stroke:white;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+@keyframes scaleIn{from{transform:scale(0)}to{transform:scale(1)}}
+.success-title{font-family:var(--display);font-size:26px;font-weight:800;letter-spacing:-.02em;text-align:center}
+.success-cod{font-family:var(--mono);font-size:12px;color:var(--txt3);letter-spacing:.1em;text-align:center}
+.success-actions{display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px;margin-top:8px}
+
+/* -----------------------------------------------
+   TOAST
+----------------------------------------------- */
+#toast{
+  position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);
+  z-index:600;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:10px 16px;
+  font-size:13px;color:var(--txt);
+  white-space:nowrap;
+  opacity:0;transition:all .25s;
+  pointer-events:none;
+  box-shadow:var(--sh);
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.error{border-color:rgba(239,68,68,.3);color:var(--red)}
+#toast.success{border-color:rgba(34,197,94,.3);color:var(--green)}
+
+/* -----------------------------------------------
+   EMPTY STATES
+----------------------------------------------- */
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;padding:48px 24px;text-align:center;
+  color:var(--txt3);
+}
+.empty-icon{width:48px;height:48px;fill:var(--border2);margin-bottom:4px}
+.empty-title{font-family:var(--display);font-size:15px;font-weight:700;color:var(--txt2)}
+.empty-sub{font-size:13px;line-height:1.5}
+</style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loader">
+  <div class="loader-ring"></div>
+  <div class="loader-label">Carregando</div>
+</div>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="hidden">
+  <div class="login-hero">
+    <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+  </div>
+  <div class="login-title">App Estações</div>
+  <div class="login-sub">Acesse com sua conta Google<br>para cadastrar estações em campo</div>
+  <button class="google-btn" id="googleLoginBtn">
+    <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.29-8.16 2.29-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+    Entrar com Google
+  </button>
+  <div id="loginError"></div>
+  <div class="login-footer">Somente usuários autorizados</div>
+</div>
+
+
+<!-- TELA SOLICITAR ACESSO -->
+<div id="accessScreen" class="hidden">
+  <div class="login-hero" style="background:var(--amber)">
+    <svg viewBox="0 0 24 24" style="fill:white;width:40px;height:40px"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+  </div>
+  <div class="login-title" style="font-size:22px">Acesso não autorizado</div>
+  <div class="login-sub">Seu email não está cadastrado.<br>Solicite acesso ao administrador.</div>
+
+  <div id="accessForm" style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.1em;text-transform:uppercase">Seu nome</div>
+      <input type="text" id="solNome" placeholder="Nome completo"
+        style="padding:13px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:14px;color:var(--txt)">
+    </div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.1em;text-transform:uppercase">Cidade de atuação</div>
+      <input type="text" id="solCidade" placeholder="Ex: São Paulo"
+        style="padding:13px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:14px;color:var(--txt)">
+    </div>
+    <button id="solicitarBtn" onclick="enviarSolicitacao()"
+      style="padding:15px;border-radius:10px;background:var(--accent);color:white;font-size:15px;font-weight:600;margin-top:4px">
+      Solicitar acesso
+    </button>
+    <button onclick="voltarLogin()"
+      style="padding:10px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--txt2);font-size:13px">
+      Usar outra conta
+    </button>
+  </div>
+
+  <div id="accessMsg" style="display:none;padding:14px 16px;border-radius:10px;font-size:13px;text-align:center;width:100%;max-width:320px"></div>
+  <div class="login-footer" id="accessEmail" style="margin-top:16px"></div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <div class="topbar-brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">Estações</div>
+        <div class="brand-badge" id="cityLabel">Campo</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="sync-pill offline" id="syncPill">
+        <div class="sync-dot"></div>
+        <span id="syncLabel">Offline</span>
+      </div>
+      <div class="avatar-btn" id="avatarBtn"></div>
+    </div>
+  </div>
+
+  <!-- PENDING BANNER -->
+  <div id="pendingBanner">
+    <div class="pending-txt">
+      <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+      <span id="pendingCount">0 pendentes para sincronizar</span>
+    </div>
+    <button class="sync-now-btn" id="syncNowBtn">Sincronizar</button>
+  </div>
+
+  <!-- VIEWS -->
+  <div id="views">
+
+    <!-- HOME -->
+    <div class="view active" id="homeView">
+      <div class="view-content">
+        <div class="greeting">
+          <div class="greeting-label">Bem-vindo</div>
+          <div class="greeting-name" id="greetingName">--</div>
+          <div class="greeting-role role-CAMPO" id="greetingRole">Campo</div>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card blue">
+            <div class="kpi-value" id="kpiTotal">--</div>
+            <div class="kpi-label">Total hoje</div>
+          </div>
+          <div class="kpi-card green">
+            <div class="kpi-value" id="kpiSynced">--</div>
+            <div class="kpi-label">Sincronizadas</div>
+          </div>
+          <div class="kpi-card amber">
+            <div class="kpi-value" id="kpiPending">--</div>
+            <div class="kpi-label">Pendentes</div>
+          </div>
+          <div class="kpi-card purple">
+            <div class="kpi-value" id="kpiSession">--</div>
+            <div class="kpi-label">Nesta sessão</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Recentes</div>
+          </div>
+          <div class="activity-list" id="activityList">
+            <div class="empty-state">
+              <svg class="empty-icon" viewBox="0 0 24 24"><path d="M20 6h-2.18c.07-.44.18-.87.18-1.32C18 2.55 15.45 0 12.22 0c-1.73 0-3.28.79-4.32 2.01L6 4 4.08 2.08A2.002 2.002 0 001.26 4.9l1.65 1.65C2.34 7.03 2 7.99 2 9v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-7-4c1.1 0 2 .9 2 2 0 .44-.15.84-.38 1.18l-3.18 3.18C11.07 7.69 11 7.35 11 7c0-1.1.9-2 2-2z"/></svg>
+              <div class="empty-title">Nenhum registro ainda</div>
+              <div class="empty-sub">Seus cadastros de hoje aparecerão aqui</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FORM VIEW -->
+    <div class="view" id="formView">
+
+      <!-- Step bar -->
+      <div class="step-bar">
+        <div class="step-item">
+          <div class="step-num active" id="sn1">1</div>
+          <div class="step-line" id="sl1"></div>
+        </div>
+        <div class="step-item">
+          <div class="step-num" id="sn2">2</div>
+          <div class="step-line" id="sl2"></div>
+        </div>
+        <div class="step-item">
+          <div class="step-num" id="sn3">3</div>
+          <div class="step-line" id="sl3"></div>
+        </div>
+        <div class="step-item">
+          <div class="step-num" id="sn4">4</div>
+          <div class="step-line"></div>
+        </div>
+      </div>
+
+      <div class="steps-wrap">
+
+        <!-- STEP 1 -- LOCALIZAÇÃO -->
+        <div class="step-panel active" id="step1">
+          <div>
+            <div class="step-heading">Localização</div>
+            <div class="step-sub">Use o GPS ou busque o endereço manualmente</div>
+          </div>
+
+          <button class="gps-btn" id="gpsBtn">
+            <svg viewBox="0 0 24 24"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+            Usar minha localização
+          </button>
+
+          <div id="miniMap" style="position:relative">
+            <div id="leafletMap" style="width:100%;height:200px;border-radius:14px;overflow:hidden;background:var(--surface)"></div>
+            <div class="map-overlay" id="mapOverlay">
+              <div class="map-spinner"></div>
+              Aguardando GPS
+            </div>
+          </div>
+
+          <div class="geo-card" id="geoCard">
+            <div class="geo-row">
+              <svg class="geo-icon" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+              <div>
+                <div class="geo-label">Endereço</div>
+                <div class="geo-value loading" id="geoEndereco">--</div>
+              </div>
+            </div>
+            <div class="geo-row">
+              <svg class="geo-icon" viewBox="0 0 24 24"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
+              <div>
+                <div class="geo-label">Bairro · Cidade</div>
+                <div class="geo-value loading" id="geoBairroCidade">--</div>
+              </div>
+            </div>
+            <div class="geo-row">
+              <svg class="geo-icon" viewBox="0 0 24 24"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5z"/></svg>
+              <div>
+                <div class="geo-label">Coordenadas</div>
+                <div class="geo-value loading" id="geoCoords">--</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 2 -- CLASSIFICAÇÃO -->
+        <div class="step-panel" id="step2">
+          <div>
+            <div class="step-heading">Classificação</div>
+            <div class="step-sub">Qual é o tipo desta estação?</div>
+          </div>
+
+          <div class="type-grid">
+            <div class="type-card type-PUBLICA" data-tipo="PUBLICA" onclick="selectTipo(this)">
+              <div class="type-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+              </div>
+              <div>
+                <div class="type-label">Pública</div>
+                <div class="type-desc">Calçada ou via pública</div>
+              </div>
+              <div class="type-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+            </div>
+            <div class="type-card type-PRIVADA" data-tipo="PRIVADA" onclick="selectTipo(this)">
+              <div class="type-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+              </div>
+              <div>
+                <div class="type-label">Privada</div>
+                <div class="type-desc">Área de estabelecimento privado</div>
+              </div>
+              <div class="type-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+            </div>
+            <div class="type-card type-CONCORRENTE" data-tipo="CONCORRENTE" onclick="selectTipo(this)">
+              <div class="type-icon">
+                <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+              </div>
+              <div>
+                <div class="type-label">Concorrente</div>
+                <div class="type-desc">Operador de bicicletas concorrente</div>
+              </div>
+              <div class="type-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+            </div>
+          </div>
+
+          <!-- Sub-campos condicionais -->
+          <div class="subtype-wrap" id="subtypePublica">
+            <div class="subtype-label">Posição na via</div>
+            <div class="pill-row">
+              <div class="pill" data-val="CALCADA" onclick="selectPill(this,'modalidade')">Calçada</div>
+              <div class="pill" data-val="VIA_PUBLICA" onclick="selectPill(this,'modalidade')">Via pública</div>
+            </div>
+          </div>
+
+          <div class="subtype-wrap" id="subtypePrivada">
+            <div class="field-group">
+              <div class="field-label">Nome do local</div>
+              <input type="text" class="field-input" id="nomeLocalPrivado" placeholder="Ex: Shopping Ibirapuera">
+            </div>
+            <div class="field-group">
+              <div class="field-label">Nome do autorizante</div>
+              <input type="text" class="field-input" id="nomeAutorizante" placeholder="Ex: João Silva">
+            </div>
+          </div>
+
+          <div class="subtype-wrap" id="subtypeConcorrente">
+            <div class="field-group">
+              <div class="field-label">Nome do concorrente</div>
+              <input type="text" class="field-input" id="nomeConcorrente" placeholder="Ex: Bike Itaú, Yellow...">
+              <div class="field-error" id="errConcorrente">Nome do concorrente obrigatório</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 3 -- FOTO -->
+        <div class="step-panel" id="step3">
+          <div>
+            <div class="step-heading">Foto da estação</div>
+            <div class="step-sub">Tire uma foto clara da estação e do entorno</div>
+          </div>
+
+          <div class="photo-area" id="photoArea">
+            <input type="file" id="photoInput" accept="image/*" capture="environment">
+            <div class="photo-placeholder" id="photoPlaceholder">
+              <svg class="photo-icon" viewBox="0 0 24 24"><path d="M20 5h-3.17L15 3H9L7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 14H4V7h4.05l1.83-2h4.24l1.83 2H20v12zm-8-11c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zm0 8c-1.65 0-3-1.35-3-3s1.35-3 3-3 3 1.35 3 3-1.35 3-3 3z"/></svg>
+              <div class="photo-hint">Toque para fotografar</div>
+              <div class="photo-sub">Abre a câmera automaticamente</div>
+            </div>
+            <img class="photo-preview" id="photoPreview" alt="Preview">
+            <div class="photo-retake">Refazer</div>
+          </div>
+
+          <div class="photo-quality" id="photoQuality" style="display:none">
+            <svg width="14" height="14" fill="var(--green)" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+            <span id="photoSizeLabel">Foto processada</span>
+            <div class="quality-bar"><div class="quality-fill" id="qualityFill"></div></div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-label">Observações (opcional)</div>
+            <textarea class="field-input" id="observacoes" placeholder="Informações relevantes sobre a localização..." rows="3"></textarea>
+          </div>
+        </div>
+
+        <!-- STEP 4 -- REVISÃO -->
+        <div class="step-panel" id="step4">
+          <div>
+            <div class="step-heading">Revisar & Enviar</div>
+            <div class="step-sub">Confirme os dados antes de registrar</div>
+          </div>
+
+          <img class="review-photo" id="reviewPhoto" alt="Foto da estação">
+
+          <div class="review-section">
+            <div class="review-row">
+              <div class="review-key">Endereço</div>
+              <div class="review-val" id="rvEndereco">--</div>
+            </div>
+            <div class="review-row">
+              <div class="review-key">Bairro</div>
+              <div class="review-val" id="rvBairro">--</div>
+            </div>
+            <div class="review-row">
+              <div class="review-key">Cidade</div>
+              <div class="review-val" id="rvCidade">--</div>
+            </div>
+            <div class="review-row">
+              <div class="review-key">Tipo</div>
+              <div class="review-val" id="rvTipo">--</div>
+            </div>
+            <div class="review-row">
+              <div class="review-key">Detalhe</div>
+              <div class="review-val" id="rvDetalhe">--</div>
+            </div>
+            <div class="review-row">
+              <div class="review-key">GPS</div>
+              <div class="review-val" id="rvCoords">--</div>
+            </div>
+            <div class="review-row" id="rvObsRow" style="display:none">
+              <div class="review-key">Observações</div>
+              <div class="review-val" id="rvObs">--</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /steps-wrap -->
+
+      <!-- ACTIONS -->
+      <div class="step-actions" id="stepActions">
+        <button class="btn btn-ghost" id="btnBack" onclick="goBack()" style="display:none">
+          <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+        <button class="btn btn-primary" id="btnNext" onclick="goNext()">
+          Próximo
+          <svg viewBox="0 0 24 24"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>
+        </button>
+      </div>
+
+    </div><!-- /formView -->
+
+    <!-- HISTORY -->
+    <div class="view" id="historyView">
+      <div class="history-filter" id="histFilter">
+        <div class="filter-chip active" data-filter="TODOS" onclick="filterHist(this)">Todos</div>
+        <div class="filter-chip" data-filter="PUBLICA" onclick="filterHist(this)">Pública</div>
+        <div class="filter-chip" data-filter="PRIVADA" onclick="filterHist(this)">Privada</div>
+        <div class="filter-chip" data-filter="CONCORRENTE" onclick="filterHist(this)">Concorrente</div>
+        <div class="filter-chip" data-filter="PENDENTE" onclick="filterHist(this)">Pendentes</div>
+      </div>
+      <div class="history-list" id="historyList"></div>
+    </div>
+
+  </div><!-- /views -->
+
+  <!-- NAV -->
+  <nav id="nav">
+    <div class="nav-tab active" id="tab-home" onclick="switchTab('home')">
+      <svg class="nav-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      Início
+    </div>
+    <div class="nav-tab" id="tab-form" onclick="switchTab('form')">
+      <svg class="nav-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+      Cadastrar
+    </div>
+    <div class="nav-tab" id="tab-history" onclick="switchTab('history')">
+      <div class="nav-badge" id="histBadge"></div>
+      <svg class="nav-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+      Histórico
+    </div>
+  </nav>
+
+</div><!-- /app -->
+
+<!-- SUCCESS -->
+<div id="successOverlay">
+  <div class="success-icon">
+    <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+  </div>
+  <div class="success-title">Estação registrada!</div>
+  <div class="success-cod" id="successCod"></div>
+  <div class="success-actions">
+    <button class="btn btn-primary" onclick="novoRegistro()">Registrar outra</button>
+    <button class="btn btn-ghost" onclick="irParaHistorico()" style="width:100%">Ver histórico</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+/* -----------------------------------------------------------
+   CONFIGURAÇÃO -- alterar antes do deploy
+----------------------------------------------------------- */
+// ================================================================
+// CONFIGURACAO -- preencher antes do deploy
+// ================================================================
+var CONFIG = {
+  BACKEND_URL:      'https://script.google.com/macros/s/AKfycbw9siDmz5islH4Gv26BAhA8SeXi1XZFPwLg_Hxrf421kusgDITfr8Lu7qKWJFcbHrKR/exec',
+  GOOGLE_CLIENT_ID: '337567650924-a16v6esls9fnsu323ndkt1le7abk3pgu.apps.googleusercontent.com',
+  DB_VERSION:       1
+};
+// ================================================================
+
+/* -----------------------------------------------------------
+   STATE
+----------------------------------------------------------- */
+var S = {
+  user:    null,
+  online:  navigator.onLine,
+  step:    1,
+  session: 0,
+
+  // Form state
+  lat: null, lng: null,
+  endereco: '', bairro: '', cidade: '', pais: 'BR',
+  tipo: '', modalidade: '',
+  nomeLocalPrivado: '', nomeAutorizante: '',
+  nomeConcorrente: '',
+  photoBlob: null, photoDataUrl: null,
+  observacoes: '',
+
+  // History
+  histFilter: 'TODOS',
+  records: []   // IndexedDB cache em memória
+};
+
+/* -----------------------------------------------------------
+   INDEXEDDB
+----------------------------------------------------------- */
+var db = null;
+
+function initDB() {
+  return new Promise(function(resolve, reject) {
+    var req = indexedDB.open('estacoes_pwa', CONFIG.DB_VERSION);
+    req.onupgradeneeded = function(e) {
+      var d = e.target.result;
+      if (!d.objectStoreNames.contains('estacoes')) {
+        var store = d.createObjectStore('estacoes', { keyPath: 'localId' });
+        store.createIndex('status', 'syncStatus', { unique: false });
+        store.createIndex('created', 'createdAt', { unique: false });
+      }
+      if (!d.objectStoreNames.contains('session')) {
+        d.createObjectStore('session', { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = function(e) { db = e.target.result; resolve(); };
+    req.onerror   = function(e) { reject(e); };
+  });
+}
+
+function dbPut(store, data) {
+  return new Promise(function(resolve, reject) {
+    var tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(data);
+    tx.oncomplete = resolve;
+    tx.onerror    = reject;
+  });
+}
+
+function dbGetAll(store) {
+  return new Promise(function(resolve, reject) {
+    var tx  = db.transaction(store, 'readonly');
+    var req = tx.objectStore(store).getAll();
+    req.onsuccess = function() { resolve(req.result); };
+    req.onerror   = reject;
+  });
+}
+
+function dbGet(store, key) {
+  return new Promise(function(resolve, reject) {
+    var tx  = db.transaction(store, 'readonly');
+    var req = tx.objectStore(store).get(key);
+    req.onsuccess = function() { resolve(req.result); };
+    req.onerror   = reject;
+  });
+}
+
+function dbDelete(store, key) {
+  return new Promise(function(resolve, reject) {
+    var tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).delete(key);
+    tx.oncomplete = resolve;
+    tx.onerror    = reject;
+  });
+}
+
+/* -----------------------------------------------------------
+   GOOGLE IDENTITY SERVICES AUTH
+----------------------------------------------------------- */
+/* -- AUTH GOOGLE (GSI popup mode) ----------------------- */
+
+function initGoogleAuth() {
+  // Carrega o SDK do Google Identity Services
+  var s = document.createElement('script');
+  s.src = 'https://accounts.google.com/gsi/client';
+  s.onload = function() {
+    // ux_mode:'popup' evita FedCM e funciona dentro do Apps Script
+    google.accounts.id.initialize({
+      client_id:    CONFIG.GOOGLE_CLIENT_ID,
+      callback:     handleGoogleCallback,
+      ux_mode:      'popup',
+      auto_select:  false
+    });
+    showLoginScreen();
+  };
+  s.onerror = function() {
+    showLoginScreen();
+    showLoginError('Falha ao carregar SDK do Google. Verifique a conexao.');
+  };
+  document.head.appendChild(s);
+}
+
+function handleGoogleCallback(response) {
+  if (!response || !response.credential) {
+    showLoginError('Falha no login com Google.');
+    return;
+  }
+  validateWithBackend(response.credential);
+}
+
+  validateWithBackend(response.credential);
+}
+
+function validateWithBackend(tokenId) {
+  showLoader('Autenticando...');
+
+  // Decodificar email do JWT sem biblioteca (payload e base64url)
+  var email = '';
+  try {
+    var payload = tokenId.split('.')[1];
+    var padded  = payload + '==='.slice(0, (4 - payload.length % 4) % 4);
+    var decoded = JSON.parse(atob(padded.replace(/-/g,'+').replace(/_/,'/')));
+    email = decoded.email || '';
+  } catch(ex) {}
+
+  callBackend('validateUser', { tokenId: tokenId })
+    .then(function(res) {
+      hideLoader();
+      if (res.ok) {
+        S.user = res;
+        saveSession(tokenId, res);
+        initApp();
+      } else {
+        // Qualquer erro de auth -> mostrar tela de solicitacao
+        showAccessScreen(email, tokenId);
+      }
+    })
+    .catch(function(e) {
+      hideLoader();
+      showLoginScreen();
+      showLoginError(String(e));
+    });
+}
+
+function saveSession(tokenId, user) {
+  dbPut('session', { key: 'auth', tokenId: tokenId, user: user, exp: Date.now() + 8*3600*1000 });
+}
+
+async function restoreSession() {
+  try {
+    var sess = await dbGet('session', 'auth');
+    if (sess && sess.exp > Date.now() && sess.user) {
+      S.user = sess.user;
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
+function showLoginScreen() {
+  hideLoader();
+  document.getElementById('loginScreen').classList.remove('hidden');
+}
+function showLoginError(msg) {
+  var el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+
+// handler movido para DOMContentLoaded
+
+
+/* -----------------------------------------------------------
+   BACKEND -- APPS SCRIPT
+----------------------------------------------------------- */
+function callBackend(action, payload) {
+  var url = CONFIG.BACKEND_URL + '?action=' + action;
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  }).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  });
+}
+
+/* -----------------------------------------------------------
+   APP INIT
+----------------------------------------------------------- */
+async function boot() {
+  await initDB();
+  var restored = await restoreSession();
+  if (restored) {
+    initApp();
+  } else {
+    initGoogleAuth();
+  }
+}
+
+function initApp() {
+  hideLoader();
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+
+  renderUser();
+  updateOnlineStatus();
+  loadRecords();
+  updateKPIs();
+
+  window.addEventListener('online',  updateOnlineStatus);
+  window.addEventListener('offline', updateOnlineStatus);
+}
+
+function renderUser() {
+  var u = S.user;
+  if (!u) return;
+
+  var ini = (u.nome || 'U').charAt(0).toUpperCase();
+  document.getElementById('avatarBtn').textContent = ini;
+  document.getElementById('greetingName').textContent = (u.nome || u.email || '').split(' ')[0];
+  var roleEl = document.getElementById('greetingRole');
+  roleEl.textContent = u.role || 'CAMPO';
+  roleEl.className = 'greeting-role role-' + (u.role || 'CAMPO');
+
+  if (u.cidade) {
+    document.getElementById('cityLabel').textContent = u.cidade;
+  }
+}
+
+/* -----------------------------------------------------------
+   ONLINE / OFFLINE
+----------------------------------------------------------- */
+function updateOnlineStatus() {
+  S.online = navigator.onLine;
+  var pill  = document.getElementById('syncPill');
+  var label = document.getElementById('syncLabel');
+
+  if (S.online) {
+    pill.className  = 'sync-pill online';
+    label.textContent = 'Online';
+    syncPendentes();
+  } else {
+    pill.className  = 'sync-pill offline';
+    label.textContent = 'Offline';
+  }
+  updatePendingBanner();
+}
+
+/* -----------------------------------------------------------
+   RECORDS / HISTORY
+----------------------------------------------------------- */
+async function loadRecords() {
+  try {
+    S.records = await dbGetAll('estacoes');
+    S.records.sort(function(a,b){ return b.createdAt - a.createdAt; });
+    renderActivity();
+    renderHistory();
+    updateKPIs();
+    updatePendingBanner();
+  } catch(e) {}
+}
+
+function updateKPIs() {
+  var hoje = new Date(); hoje.setHours(0,0,0,0);
+  var hojeTs = hoje.getTime();
+
+  var total   = 0, synced = 0, pending = 0;
+  (S.records || []).forEach(function(r) {
+    if (r.createdAt >= hojeTs) total++;
+    if (r.syncStatus === 'SYNCED') synced++;
+    if (r.syncStatus === 'PENDING') pending++;
+  });
+
+  setText('kpiTotal',   total);
+  setText('kpiSynced',  synced);
+  setText('kpiPending', pending);
+  setText('kpiSession', S.session);
+}
+
+function updatePendingBanner() {
+  var pending = (S.records || []).filter(function(r){ return r.syncStatus === 'PENDING'; });
+  var banner  = document.getElementById('pendingBanner');
+  var badge   = document.getElementById('histBadge');
+
+  if (pending.length > 0) {
+    banner.classList.add('visible');
+    setText('pendingCount', pending.length + (pending.length === 1 ? ' pendente' : ' pendentes') + ' para sincronizar');
+    badge.textContent = pending.length;
+    badge.classList.add('visible');
+  } else {
+    banner.classList.remove('visible');
+    badge.classList.remove('visible');
+  }
+}
+
+function renderActivity() {
+  var list  = document.getElementById('activityList');
+  var items = (S.records || []).slice(0, 8);
+
+  if (!items.length) {
+    list.innerHTML = '<div class="empty-state"><svg class="empty-icon" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/></svg><div class="empty-title">Nenhum registro</div><div class="empty-sub">Seus cadastros de hoje aparecerão aqui</div></div>';
+    return;
+  }
+
+  list.innerHTML = items.map(function(r) {
+    var dt  = new Date(r.createdAt);
+    var hm  = pad(dt.getHours()) + ':' + pad(dt.getMinutes());
+    var chip = r.syncStatus === 'SYNCED'
+      ? '<span class="status-chip chip-ok">OK</span>'
+      : '<span class="status-chip chip-pending">Pendente</span>';
+    return '<div class="activity-item">'
+      + '<div class="activity-dot dot-' + r.tipo + '"></div>'
+      + '<div class="activity-info">'
+      + '<div class="activity-addr">' + esc(r.endereco || 'Sem endereço') + '</div>'
+      + '<div class="activity-meta">' + esc(r.tipo) + (r.bairro ? ' · ' + esc(r.bairro) : '') + '</div>'
+      + '</div>'
+      + chip
+      + '<div class="activity-time">' + hm + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function renderHistory() {
+  var list   = document.getElementById('historyList');
+  var filter = S.histFilter;
+  var items  = (S.records || []).filter(function(r) {
+    if (filter === 'TODOS') return true;
+    if (filter === 'PENDENTE') return r.syncStatus === 'PENDING';
+    return r.tipo === filter;
+  });
+
+  if (!items.length) {
+    list.innerHTML = '<div class="empty-state" style="padding-top:40px"><svg class="empty-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg><div class="empty-title">Nenhum resultado</div><div class="empty-sub">Tente outro filtro</div></div>';
+    return;
+  }
+
+  list.innerHTML = items.map(function(r) {
+    var dt  = new Date(r.createdAt);
+    var dts = pad(dt.getDate()) + '/' + pad(dt.getMonth()+1) + ' ' + pad(dt.getHours()) + ':' + pad(dt.getMinutes());
+    var badge = r.syncStatus === 'PENDING'
+      ? '<div class="hist-pending-badge"><svg width="8" height="8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>Pendente</div>'
+      : '';
+    return '<div class="hist-card">'
+      + '<div class="hist-head">'
+      + '<div class="hist-tipo"><div class="hist-dot dot-' + r.tipo + '"></div>'
+      + '<span class="hist-cod">' + esc(r.tipo) + '</span></div>'
+      + badge
+      + '</div>'
+      + '<div class="hist-addr">' + esc(r.endereco || 'Endereço não disponível') + '</div>'
+      + '<div class="hist-foot">'
+      + '<span>' + esc(r.bairro || '') + (r.cidade ? (r.bairro ? ' · ' : '') + esc(r.cidade) : '') + '</span>'
+      + '<span>' + dts + '</span>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function filterHist(el) {
+  document.querySelectorAll('.filter-chip').forEach(function(c){ c.classList.remove('active'); });
+  el.classList.add('active');
+  S.histFilter = el.dataset.filter;
+  renderHistory();
+}
+
+/* -----------------------------------------------------------
+   SINCRONIZAÇÃO
+----------------------------------------------------------- */
+async function syncPendentes() {
+  if (!S.online || !S.user) return;
+
+  var pending = (S.records || []).filter(function(r){ return r.syncStatus === 'PENDING'; });
+  if (!pending.length) return;
+
+  var pill  = document.getElementById('syncPill');
+  var label = document.getElementById('syncLabel');
+  pill.className  = 'sync-pill syncing';
+  label.textContent = 'Sync...';
+
+  for (var i = 0; i < pending.length; i++) {
+    var r = pending[i];
+    try {
+      var payload = buildPayload(r);
+      var res = await callBackend('addEstacaoFromMapa', payload);
+      if (res.ok) {
+        r.syncStatus = 'SYNCED';
+        r.serverCodigo = res.estacao && res.estacao.codigo;
+        await dbPut('estacoes', r);
+      }
+    } catch(e) {
+      // network error -- tentar na próxima
+    }
+  }
+
+  await loadRecords();
+  pill.className  = 'sync-pill online';
+  label.textContent = 'Online';
+}
+
+document.getElementById('syncNowBtn').onclick = syncPendentes;
+
+function buildPayload(r) {
+  return {
+    tokenId:        S.user && S.user.tokenId || '',
+    lat:            r.lat,
+    lng:            r.lng,
+    tipo:           r.tipo,
+    modalidade:     r.modalidade || '',
+    nomeConcorrente:r.nomeConcorrente || '',
+    observacoes:    r.observacoes || '',
+    geo: {
+      cidade:   r.cidade,
+      bairro:   r.bairro,
+      endereco: r.endereco,
+      pais:     r.pais || 'BR'
+    },
+    operador:  S.user && S.user.email || '',
+    origem:    'PWA',
+    foto: r.photoBase64 ? {
+      base64: r.photoBase64,
+      mime:   r.photoMime || 'image/jpeg',
+      name:   'foto_' + r.localId + '.jpg'
+    } : null
+  };
+}
+
+/* -----------------------------------------------------------
+   NAVEGAÇÃO
+----------------------------------------------------------- */
+function switchTab(tab) {
+  ['home','form','history'].forEach(function(t) {
+    document.getElementById(t + 'View').classList.toggle('active', t === tab);
+    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+  });
+
+  if (tab === 'form') {
+    S.step = 1;
+    resetForm();
+    renderStep(1);
+  }
+  if (tab === 'history') renderHistory();
+}
+
+/* -----------------------------------------------------------
+   FORM -- MULTI-STEP
+----------------------------------------------------------- */
+function renderStep(n) {
+  // Panels
+  for (var i = 1; i <= 4; i++) {
+    var panel = document.getElementById('step' + i);
+    if (i === n)      { panel.classList.remove('exit-left'); panel.classList.add('active'); }
+    else if (i < n)   { panel.classList.remove('active'); panel.classList.add('exit-left'); }
+    else              { panel.classList.remove('active','exit-left'); }
+  }
+
+  // Step numbers
+  for (var j = 1; j <= 4; j++) {
+    var sn = document.getElementById('sn' + j);
+    if (!sn) continue;
+    sn.classList.remove('active','done');
+    if (j < n)       { sn.textContent = '✓'; sn.classList.add('done'); }
+    else if (j === n) { sn.textContent = j;   sn.classList.add('active'); }
+    else              { sn.textContent = j; }
+  }
+  // Lines
+  for (var k = 1; k <= 3; k++) {
+    var sl = document.getElementById('sl' + k);
+    if (sl) sl.classList.toggle('done', k < n);
+  }
+
+  // Buttons
+  var back = document.getElementById('btnBack');
+  var next = document.getElementById('btnNext');
+  back.style.display = n > 1 ? 'flex' : 'none';
+
+  if (n === 4) {
+    populateReview();
+    next.textContent = 'Confirmar';
+    next.innerHTML = 'Confirmar <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+    next.className = 'btn btn-success';
+  } else {
+    next.innerHTML = 'Próximo <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>';
+    next.className = 'btn btn-primary';
+  }
+}
+
+function goNext() {
+  if (!validateStep(S.step)) return;
+  if (S.step === 4) { submitForm(); return; }
+  S.step++;
+  renderStep(S.step);
+}
+
+function goBack() {
+  if (S.step <= 1) return;
+  S.step--;
+  renderStep(S.step);
+}
+
+function validateStep(n) {
+  if (n === 1) {
+    if (!S.lat || !S.lng) { showToast('Obtenha o GPS antes de continuar', 'error'); return false; }
+    return true;
+  }
+  if (n === 2) {
+    if (!S.tipo) { showToast('Selecione o tipo da estação', 'error'); return false; }
+    if (S.tipo === 'CONCORRENTE' && !document.getElementById('nomeConcorrente').value.trim()) {
+      document.getElementById('errConcorrente').classList.add('visible');
+      return false;
+    }
+    S.modalidade       = getSelectedPill('modalidade') || '';
+    S.nomeLocalPrivado = (document.getElementById('nomeLocalPrivado').value || '').trim();
+    S.nomeAutorizante  = (document.getElementById('nomeAutorizante').value || '').trim();
+    S.nomeConcorrente  = (document.getElementById('nomeConcorrente').value || '').trim();
+    return true;
+  }
+  if (n === 3) {
+    S.observacoes = (document.getElementById('observacoes').value || '').trim();
+    return true;
+  }
+  return true;
+}
+
+/* -----------------------------------------------------------
+   GPS
+----------------------------------------------------------- */
+document.getElementById('gpsBtn').onclick = function() {
+  var btn = this;
+  btn.classList.add('loading');
+  btn.innerHTML = '<div class="loader-ring" style="width:18px;height:18px;border-width:2px"></div> Localizando...';
+
+  var overlay = document.getElementById('mapOverlay');
+  overlay.classList.remove('hidden');
+
+  if (!navigator.geolocation) {
+    showToast('GPS não suportado neste dispositivo', 'error');
+    btn.classList.remove('loading');
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      S.lat = pos.coords.latitude;
+      S.lng = pos.coords.longitude;
+
+      setText('geoCoords', S.lat.toFixed(6) + ', ' + S.lng.toFixed(6));
+      setText('geoEndereco', 'Buscando endereço...');
+      setText('geoBairroCidade', '...');
+
+      // Atualiza mapa mini (Static Maps)
+      updateMiniMap(S.lat, S.lng);
+      overlay.classList.add('hidden');
+
+      // Reverse geocode via backend
+      reverseGeocode(S.lat, S.lng);
+
+      btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> GPS obtido';
+      btn.classList.remove('loading');
+      btn.style.background = 'rgba(34,197,94,.1)';
+      btn.style.borderColor = 'rgba(34,197,94,.3)';
+      btn.style.color = 'var(--green)';
+    },
+    function(err) {
+      showToast('Erro ao obter GPS: ' + err.message, 'error');
+      btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg> Tentar novamente';
+      btn.classList.remove('loading');
+      overlay.classList.add('hidden');
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+  );
+};
+
+// Instância global do mapa Leaflet
+var _leafletMap = null;
+var _leafletMarker = null;
+
+function updateMiniMap(lat, lng) {
+  var container = document.getElementById('leafletMap');
+  if (!container) return;
+
+  if (!_leafletMap) {
+    _leafletMap = L.map('leafletMap', { zoomControl: true, attributionControl: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(_leafletMap);
+
+    // Marcador customizado
+    var icon = L.divIcon({
+      html: '<div style="width:16px;height:16px;background:#3B82F6;border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.4)"></div>',
+      iconSize: [16, 16], iconAnchor: [8, 8], className: ''
+    });
+    _leafletMarker = L.marker([lat, lng], { icon: icon }).addTo(_leafletMap);
+  } else {
+    _leafletMarker.setLatLng([lat, lng]);
+  }
+
+  _leafletMap.setView([lat, lng], 17);
+
+  // Invalidar tamanho após render (necessário quando container estava oculto)
+  setTimeout(function() { _leafletMap.invalidateSize(); }, 150);
+}
+
+function reverseGeocode(lat, lng) {
+  if (!S.online) return;
+  callBackend('reverseGeocodePWA', { lat: lat, lng: lng, tokenId: S.user && S.user.tokenId })
+    .then(function(res) {
+      if (res.ok && res.geo) {
+        S.endereco = res.geo.endereco || '';
+        S.bairro   = res.geo.bairro   || '';
+        S.cidade   = res.geo.cidade   || '';
+        S.pais     = res.geo.pais     || 'BR';
+        setText('geoEndereco', S.endereco || '--');
+        setText('geoBairroCidade', [S.bairro, S.cidade].filter(Boolean).join(' · ') || '--');
+        document.querySelectorAll('#geoEndereco,#geoBairroCidade,#geoCoords').forEach(function(el){
+          el.classList.remove('loading');
+        });
+      }
+    })
+    .catch(function() {
+      setText('geoEndereco', 'Offline -- preencher ao sincronizar');
+    });
+}
+
+/* -----------------------------------------------------------
+   TIPO
+----------------------------------------------------------- */
+function selectTipo(el) {
+  document.querySelectorAll('.type-card').forEach(function(c){ c.classList.remove('selected'); });
+  el.classList.add('selected');
+  S.tipo = el.dataset.tipo;
+
+  document.getElementById('subtypePublica').classList.toggle('visible', S.tipo === 'PUBLICA');
+  document.getElementById('subtypePrivada').classList.toggle('visible', S.tipo === 'PRIVADA');
+  document.getElementById('subtypeConcorrente').classList.toggle('visible', S.tipo === 'CONCORRENTE');
+  document.getElementById('errConcorrente').classList.remove('visible');
+}
+
+function selectPill(el, group) {
+  var parent = el.closest('.pill-row');
+  parent.querySelectorAll('.pill').forEach(function(p){ p.classList.remove('selected'); });
+  el.classList.add('selected');
+}
+
+function getSelectedPill(group) {
+  var sel = document.querySelector('.pill.selected');
+  return sel ? sel.dataset.val : '';
+}
+
+/* -----------------------------------------------------------
+   FOTO
+----------------------------------------------------------- */
+document.getElementById('photoInput').onchange = function(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+
+  compressImage(file, 1200, 0.75, function(blob, dataUrl) {
+    S.photoBlob    = blob;
+    S.photoDataUrl = dataUrl;
+
+    var prev = document.getElementById('photoPreview');
+    prev.src = dataUrl;
+    prev.classList.add('visible');
+
+    var area = document.getElementById('photoArea');
+    area.classList.add('has-photo');
+    document.getElementById('photoPlaceholder').classList.add('hidden');
+
+    var sizeKB = Math.round(blob.size / 1024);
+    var quality = document.getElementById('photoQuality');
+    quality.style.display = 'flex';
+    setText('photoSizeLabel', 'Foto comprimida: ' + sizeKB + 'KB');
+    var pct = Math.max(10, Math.min(100, 100 - (sizeKB / 50)));
+    document.getElementById('qualityFill').style.width = pct + '%';
+  });
+};
+
+function compressImage(file, maxW, quality, cb) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      var w = img.width, h = img.height;
+      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(function(blob) {
+        var reader2 = new FileReader();
+        reader2.onload = function(ev) { cb(blob, ev.target.result); };
+        reader2.readAsDataURL(blob);
+      }, 'image/jpeg', quality);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+/* -----------------------------------------------------------
+   REVIEW
+----------------------------------------------------------- */
+function populateReview() {
+  setText('rvEndereco', S.endereco || 'Não disponível offline');
+  setText('rvBairro', S.bairro || '--');
+  setText('rvCidade', S.cidade || '--');
+  setText('rvTipo', S.tipo || '--');
+
+  var detalhe = '';
+  if (S.tipo === 'PUBLICA')     detalhe = S.modalidade === 'CALCADA' ? 'Calçada' : S.modalidade ? 'Via pública' : '--';
+  if (S.tipo === 'PRIVADA')     detalhe = S.nomeLocalPrivado || 'Local não informado';
+  if (S.tipo === 'CONCORRENTE') detalhe = S.nomeConcorrente  || '--';
+  setText('rvDetalhe', detalhe);
+  setText('rvCoords', S.lat ? S.lat.toFixed(5) + ', ' + S.lng.toFixed(5) : '--');
+
+  var obs = S.observacoes;
+  document.getElementById('rvObsRow').style.display = obs ? 'flex' : 'none';
+  setText('rvObs', obs);
+
+  var rp = document.getElementById('reviewPhoto');
+  if (S.photoDataUrl) { rp.src = S.photoDataUrl; rp.classList.add('visible'); }
+  else                { rp.classList.remove('visible'); }
+}
+
+/* -----------------------------------------------------------
+   SUBMIT
+----------------------------------------------------------- */
+async function submitForm() {
+  var btn = document.getElementById('btnNext');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="loader-ring" style="width:18px;height:18px;border-width:2px"></div> Salvando...';
+
+  var localId = 'local_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+
+  // Converter foto para base64 se existir
+  var photoBase64 = null, photoMime = null;
+  if (S.photoBlob) {
+    try {
+      photoBase64 = S.photoDataUrl.split(',')[1];
+      photoMime   = S.photoBlob.type || 'image/jpeg';
+    } catch(e) {}
+  }
+
+  var record = {
+    localId:      localId,
+    lat:          S.lat,
+    lng:          S.lng,
+    endereco:     S.endereco,
+    bairro:       S.bairro,
+    cidade:       S.cidade,
+    pais:         S.pais || 'BR',
+    tipo:         S.tipo,
+    modalidade:   S.modalidade,
+    nomeConcorrente:   S.nomeConcorrente,
+    nomeLocalPrivado:  S.nomeLocalPrivado,
+    nomeAutorizante:   S.nomeAutorizante,
+    observacoes:  S.observacoes,
+    photoBase64:  photoBase64,
+    photoMime:    photoMime,
+    photoDataUrl: S.photoDataUrl,
+    operador:     S.user && S.user.email,
+    createdAt:    Date.now(),
+    syncStatus:   'PENDING'
+  };
+
+  // Salvar localmente sempre
+  await dbPut('estacoes', record);
+  S.session++;
+
+  // Tentar sincronizar imediatamente
+  if (S.online) {
+    try {
+      var payload = buildPayload(record);
+      var res = await callBackend('addEstacaoFromMapa', payload);
+      if (res.ok) {
+        record.syncStatus  = 'SYNCED';
+        record.serverCodigo = res.estacao && res.estacao.codigo;
+        await dbPut('estacoes', record);
+      }
+    } catch(e) {
+      // rede falhou -- fica como PENDING, vai sincronizar depois
+    }
+  }
+
+  await loadRecords();
+  showSuccess(record.serverCodigo || localId);
+  btn.disabled = false;
+}
+
+/* -----------------------------------------------------------
+   SUCESSO
+----------------------------------------------------------- */
+function showSuccess(codigo) {
+  var ov = document.getElementById('successOverlay');
+  setText('successCod', codigo);
+  ov.classList.add('visible');
+}
+
+function novoRegistro() {
+  document.getElementById('successOverlay').classList.remove('visible');
+  switchTab('form');
+}
+
+function irParaHistorico() {
+  document.getElementById('successOverlay').classList.remove('visible');
+  switchTab('history');
+}
+
+/* -----------------------------------------------------------
+   RESET FORM
+----------------------------------------------------------- */
+function resetForm() {
+  S.lat = null; S.lng = null;
+  S.endereco = ''; S.bairro = ''; S.cidade = ''; S.pais = 'BR';
+  S.tipo = ''; S.modalidade = '';
+  S.nomeLocalPrivado = ''; S.nomeAutorizante = '';
+  S.nomeConcorrente = '';
+  S.photoBlob = null; S.photoDataUrl = null;
+  S.observacoes = '';
+
+  // UI reset
+  var btn = document.getElementById('gpsBtn');
+  btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg> Usar minha localização';
+  btn.className = 'gps-btn';
+  btn.style.background = btn.style.borderColor = btn.style.color = '';
+
+  // Resetar mapa Leaflet
+  if (_leafletMap) { _leafletMap.remove(); _leafletMap = null; _leafletMarker = null; }
+  document.getElementById('leafletMap').innerHTML = '';
+  document.getElementById('miniMap').insertAdjacentHTML('beforeend',
+    '<div class="map-overlay" id="mapOverlay"><div class="map-spinner"></div>Aguardando GPS</div>');
+  ['geoEndereco','geoBairroCidade','geoCoords'].forEach(function(id){ setText(id, '--'); document.getElementById(id).classList.add('loading'); });
+
+  document.querySelectorAll('.type-card').forEach(function(c){ c.classList.remove('selected'); });
+  document.querySelectorAll('.pill').forEach(function(p){ p.classList.remove('selected'); });
+  document.getElementById('subtypePublica').classList.remove('visible');
+  document.getElementById('subtypePrivada').classList.remove('visible');
+  document.getElementById('subtypeConcorrente').classList.remove('visible');
+  ['nomeLocalPrivado','nomeAutorizante','nomeConcorrente','observacoes'].forEach(function(id){ var el = document.getElementById(id); if(el) el.value = ''; });
+
+  var prev = document.getElementById('photoPreview');
+  prev.classList.remove('visible'); prev.src = '';
+  document.getElementById('photoArea').classList.remove('has-photo');
+  document.getElementById('photoPlaceholder').classList.remove('hidden');
+  document.getElementById('photoQuality').style.display = 'none';
+  document.getElementById('photoInput').value = '';
+
+  var btnN = document.getElementById('btnNext');
+  btnN.disabled = false;
+}
+
+/* -----------------------------------------------------------
+   TOAST
+----------------------------------------------------------- */
+var toastTimer = null;
+function showToast(msg, type) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 3000);
+}
+
+/* -----------------------------------------------------------
+   LOADER
+----------------------------------------------------------- */
+function showLoader(msg) {
+  var el = document.getElementById('loader');
+  el.querySelector('.loader-label').textContent = msg || 'Carregando';
+  el.classList.remove('out');
+}
+function hideLoader() {
+  document.getElementById('loader').classList.add('out');
+}
+
+/* -----------------------------------------------------------
+   UTILS
+----------------------------------------------------------- */
+function setText(id, val) {
+  var el = document.getElementById(id);
+  if (el) el.textContent = val == null ? '--' : val;
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function pad(n) { return n < 10 ? '0'+n : n; }
+
+
+/* --- SOLICITAR ACESSO ----------------------------------- */
+var _pendingToken = null;
+var _pendingEmail = null;
+
+function showAccessScreen(email, token) {
+  _pendingEmail = email;
+  _pendingToken = token;
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('accessScreen').classList.remove('hidden');
+  document.getElementById('accessEmail').textContent = email;
+  document.getElementById('accessMsg').style.display = 'none';
+}
+
+function voltarLogin() {
+  document.getElementById('accessScreen').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('loginError').classList.remove('visible');
+}
+
+function enviarSolicitacao() {
+  var nome   = (document.getElementById('solNome').value   || '').trim();
+  var cidade = (document.getElementById('solCidade').value || '').trim();
+
+  if (!nome)   { showToast('Informe seu nome', 'error');   return; }
+  if (!cidade) { showToast('Informe a cidade', 'error');   return; }
+
+  var btn = document.getElementById('solicitarBtn');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+
+  callBackend('solicitarAcesso', {
+    email:  _pendingEmail,
+    nome:   nome,
+    cidade: cidade,
+    pais:   'BR'
+  }).then(function(res) {
+    var msg = document.getElementById('accessMsg');
+    msg.style.display = 'block';
+
+    if (res.ok || res.status === 'JA_PENDENTE') {
+      msg.style.background  = 'rgba(34,197,94,.1)';
+      msg.style.border      = '1px solid rgba(34,197,94,.25)';
+      msg.style.color       = 'var(--green)';
+      msg.textContent       = res.msg || 'Solicitacao enviada com sucesso!';
+      document.getElementById('accessForm').style.display = 'none';
+    } else {
+      msg.style.background = 'rgba(239,68,68,.1)';
+      msg.style.border     = '1px solid rgba(239,68,68,.25)';
+      msg.style.color      = 'var(--red)';
+      msg.textContent      = res.error || 'Erro ao enviar solicitacao.';
+      btn.disabled         = false;
+      btn.textContent      = 'Solicitar acesso';
+    }
+  }).catch(function(e) {
+    showToast('Erro: ' + e, 'error');
+    btn.disabled    = false;
+    btn.textContent = 'Solicitar acesso';
+  });
+}
+
+/* -----------------------------------------------------------
+   BOOT
+----------------------------------------------------------- */
+window.addEventListener('DOMContentLoaded', function() {
+  var loginBtn = document.getElementById('googleLoginBtn');
+  if (loginBtn) {
+    loginBtn.onclick = function() {
+      if (typeof google === 'undefined' || !google.accounts) {
+        showLoginError('SDK ainda carregando, tente novamente.');
+        return;
+      }
+      google.accounts.id.prompt(function(notification) {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          var div = document.createElement('div');
+          loginBtn.parentNode.insertBefore(div, loginBtn.nextSibling);
+          google.accounts.id.renderButton(div, { theme:'outline', size:'large', width:300 });
+          loginBtn.style.display = 'none';
+        }
+      });
+    };
+  }
+  boot();
+});
+</script>
+</body>
+</html>
