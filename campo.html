@@ -4620,9 +4620,19 @@ textarea.d-input{resize:none;min-height:72px;line-height:1.5}
   window.initMap = initMap;
   </script>
 
-  <script
-    src="https://maps.googleapis.com/maps/api/js?key=<?= GMAPS_API_KEY ?>&callback=initMap&libraries=geometry,places"
-    async defer></script>
+  <meta name="gmaps-key" content="CAMPO_GMAPS_KEY_PLACEHOLDER">
+  <script>
+  (function() {
+    var meta = document.querySelector('meta[name="gmaps-key"]');
+    var key  = meta ? meta.getAttribute('content') : '';
+    var s    = document.createElement('script');
+    s.src    = 'https://maps.googleapis.com/maps/api/js?key=' + key
+               + '&callback=initMap&libraries=geometry,places';
+    s.async  = true;
+    s.defer  = true;
+    document.head.appendChild(s);
+  })();
+  </script>
 
   <script>
 /* ===================== PREMIUM UX PACK (JS) ===================== */
