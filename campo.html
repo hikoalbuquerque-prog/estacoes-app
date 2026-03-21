@@ -4621,21 +4621,19 @@ textarea.d-input{resize:none;min-height:72px;line-height:1.5}
   </script>
 
   <script>
-  // Carregar Google Maps via google.script.run (chave vem do servidor)
-  window._mapsLoaded = false;
-  window._mapsQueue  = [];
-
-  google.script.run
-    .withSuccessHandler(function(key) {
-      if (!key) { console.error('GMAPS_API_KEY nao configurada no servidor'); return; }
-      var s   = document.createElement('script');
-      s.src   = 'https://maps.googleapis.com/maps/api/js?key=' + key
-                + '&callback=initMap&libraries=geometry,places';
-      s.async = true;
-      document.head.appendChild(s);
-    })
-    .withFailureHandler(function(e) { console.error('Falha ao obter chave Maps:', e); })
-    .getMapsApiKey();
+  (function() {
+    var key = 'MAPS_KEY_VALUE';
+    if (!key || key === 'MAPS_KEY_VALUE') {
+      document.getElementById('map').innerHTML =
+        '<div style="color:#fff;padding:40px;text-align:center">Erro: chave do Maps nao configurada</div>';
+      return;
+    }
+    var s   = document.createElement('script');
+    s.src   = 'https://maps.googleapis.com/maps/api/js?key=' + key
+              + '&callback=initMap&libraries=geometry,places';
+    s.async = true;
+    document.head.appendChild(s);
+  })();
   </script>
 
   <script>
