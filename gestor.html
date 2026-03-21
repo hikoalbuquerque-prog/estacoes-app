@@ -750,12 +750,15 @@ var S = {
    BACKEND
 --------------------------------------- */
 function api(action, payload) {
-  var url = CFG.BACKEND_URL + '?action=' + action;
-  return fetch(url, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(payload || {})
-  }).then(function(r){ return r.json(); });
+  var body = JSON.stringify(payload || {});
+  var url  = CFG.BACKEND_URL
+    + '?action=' + encodeURIComponent(action)
+    + '&d='      + encodeURIComponent(body);
+  return fetch(url, { method: 'GET' })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
 }
 
 /* ---------------------------------------
@@ -769,6 +772,7 @@ function initAuth() {
       client_id: CFG.GOOGLE_CLIENT_ID,
       callback: onGoogleLogin,
       ux_mode: 'popup',
+      use_fedcm_for_prompt: false,
       auto_select: false
     });
     google.accounts.id.prompt(function(n) {
