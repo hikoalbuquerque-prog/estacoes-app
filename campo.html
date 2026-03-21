@@ -677,11 +677,49 @@ textarea.field-input{resize:none;min-height:80px;line-height:1.5}
             Usar minha localização
           </button>
 
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="flex:1;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 14px">
+              <svg style="width:16px;height:16px;fill:var(--txt3);flex-shrink:0" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+              <input type="text" id="enderecoManual" placeholder="Ou buscar endereço..."
+                style="flex:1;background:none;font-size:14px;color:var(--txt)"
+                onkeydown="if(event.key==='Enter')buscarEndereco()">
+            </div>
+            <button onclick="buscarEndereco()"
+              style="padding:11px 14px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--txt2);font-size:13px;white-space:nowrap">
+              Buscar
+            </button>
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="flex:1;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 14px">
+              <svg style="width:16px;height:16px;fill:var(--txt3);flex-shrink:0" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+              <input type="text" id="enderecoManual" placeholder="Ou buscar endereco..."
+                style="flex:1;background:none;font-size:14px;color:var(--txt)"
+                onkeydown="if(event.key==='Enter')buscarEndereco()">
+            </div>
+            <button onclick="buscarEndereco()"
+              style="padding:11px 14px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--txt2);font-size:13px">
+              Buscar
+            </button>
+          </div>
+
           <div id="miniMap" style="position:relative">
             <div id="leafletMap" style="width:100%;height:200px;border-radius:14px;overflow:hidden;background:var(--surface)"></div>
             <div class="map-overlay" id="mapOverlay">
               <div class="map-spinner"></div>
               Aguardando GPS
+            </div>
+            <!-- Controles de filtro sobrepostos ao mapa -->
+            <div id="mapFilterBar" style="display:none;position:absolute;top:8px;right:8px;z-index:1000;display:flex;flex-direction:column;gap:4px">
+              <label style="display:flex;align-items:center;gap:5px;background:rgba(17,24,39,.85);border-radius:6px;padding:4px 8px;font-size:11px;color:white;cursor:pointer">
+                <input type="checkbox" id="filtPub" checked onchange="refreshMapMarkers()"> Publica
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;background:rgba(17,24,39,.85);border-radius:6px;padding:4px 8px;font-size:11px;color:white;cursor:pointer">
+                <input type="checkbox" id="filtPriv" checked onchange="refreshMapMarkers()"> Privada
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;background:rgba(17,24,39,.85);border-radius:6px;padding:4px 8px;font-size:11px;color:white;cursor:pointer">
+                <input type="checkbox" id="filtConc" checked onchange="refreshMapMarkers()"> Concorrente
+              </label>
             </div>
           </div>
 
@@ -1497,9 +1535,12 @@ document.getElementById('gpsBtn').onclick = function() {
   );
 };
 
-// Instância global do mapa Leaflet
-var _leafletMap = null;
+// Instancia global do mapa Leaflet
+var _leafletMap    = null;
 var _leafletMarker = null;
+var _estLayer      = null;  // camada de estacoes existentes
+
+var _CORES_TIPO = { PUBLICA:'#22C55E', PRIVADA:'#3B82F6', CONCORRENTE:'#F59E0B' };
 
 function updateMiniMap(lat, lng) {
   var container = document.getElementById('leafletMap');
@@ -1507,24 +1548,116 @@ function updateMiniMap(lat, lng) {
 
   if (!_leafletMap) {
     _leafletMap = L.map('leafletMap', { zoomControl: true, attributionControl: false });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19
-    }).addTo(_leafletMap);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(_leafletMap);
 
-    // Marcador customizado
+    // Marcador de nova estacao (arrastavel)
     var icon = L.divIcon({
-      html: '<div style="width:16px;height:16px;background:#3B82F6;border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.4)"></div>',
-      iconSize: [16, 16], iconAnchor: [8, 8], className: ''
+      html: '<div style="width:18px;height:18px;background:#3B82F6;border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.5)"></div>',
+      iconSize: [18, 18], iconAnchor: [9, 9], className: ''
     });
-    _leafletMarker = L.marker([lat, lng], { icon: icon }).addTo(_leafletMap);
+    _leafletMarker = L.marker([lat, lng], { icon: icon, draggable: true }).addTo(_leafletMap);
+
+    // Ao arrastar, atualizar coordenadas e reverseGeocode
+    _leafletMarker.on('dragend', function(e) {
+      var pos = e.target.getLatLng();
+      S.lat = pos.lat;
+      S.lng = pos.lng;
+      setText('geoCoords', pos.lat.toFixed(6) + ', ' + pos.lng.toFixed(6));
+      setText('geoEndereco', 'Buscando...');
+      setText('geoBairroCidade', '...');
+      reverseGeocode(pos.lat, pos.lng);
+    });
+
+    // Carregar estacoes existentes no mapa
+    carregarEstacoesNoMapa();
+
+    // Mostrar barra de filtros
+    var fb = document.getElementById('mapFilterBar');
+    if (fb) fb.style.display = 'flex';
+
   } else {
     _leafletMarker.setLatLng([lat, lng]);
   }
 
   _leafletMap.setView([lat, lng], 17);
-
-  // Invalidar tamanho após render (necessário quando container estava oculto)
   setTimeout(function() { _leafletMap.invalidateSize(); }, 150);
+}
+
+function carregarEstacoesNoMapa() {
+  if (!_leafletMap || !S.online) return;
+
+  callBackend('getEstacoesWebApp', {})
+    .then(function(res) {
+      var list = Array.isArray(res) ? res : (res.estacoes || []);
+      S.estacoesExistentes = list;
+      refreshMapMarkers();
+    })
+    .catch(function() {});
+}
+
+function refreshMapMarkers() {
+  if (!_leafletMap) return;
+
+  // Remover camada anterior
+  if (_estLayer) { _leafletMap.removeLayer(_estLayer); _estLayer = null; }
+
+  var filtPub  = document.getElementById('filtPub');
+  var filtPriv = document.getElementById('filtPriv');
+  var filtConc = document.getElementById('filtConc');
+  var showPub  = !filtPub  || filtPub.checked;
+  var showPriv = !filtPriv || filtPriv.checked;
+  var showConc = !filtConc || filtConc.checked;
+
+  var markers = [];
+  (S.estacoesExistentes || []).forEach(function(e) {
+    if (!e.lat || !e.lng) return;
+    var tipo = (e.tipo || '').toUpperCase();
+    if (tipo === 'PUBLICA'     && !showPub)  return;
+    if (tipo === 'PRIVADA'     && !showPriv) return;
+    if (tipo === 'CONCORRENTE' && !showConc) return;
+
+    var cor  = _CORES_TIPO[tipo] || '#94A3B8';
+    var icon = L.divIcon({
+      html: '<div style="width:10px;height:10px;background:' + cor + ';border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',
+      iconSize: [10, 10], iconAnchor: [5, 5], className: ''
+    });
+    var m = L.marker([e.lat, e.lng], { icon: icon });
+    m.bindPopup('<b>' + (e.endereco || e.bairro || tipo) + '</b><br><small>' + tipo + '</small>');
+    markers.push(m);
+  });
+
+  _estLayer = L.layerGroup(markers).addTo(_leafletMap);
+}
+
+function buscarEndereco() {
+  var input = document.getElementById('enderecoManual');
+  var query = input ? (input.value || '').trim() : '';
+  if (!query) { showToast('Digite um endereco para buscar', 'error'); return; }
+
+  if (!S.online) { showToast('Sem conexao -- use o GPS', 'error'); return; }
+
+  var url = CONFIG.BACKEND_URL
+    + '?action=geocodeEndereco'
+    + '&d=' + encodeURIComponent(JSON.stringify({ endereco: query }));
+
+  fetch(url, { method: 'GET' })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (!res.ok || !res.lat) { showToast('Endereco nao encontrado', 'error'); return; }
+      S.lat = res.lat;
+      S.lng = res.lng;
+      S.endereco    = res.endereco || query;
+      S.bairro      = res.bairro   || '';
+      S.cidade      = res.cidade   || '';
+      setText('geoEndereco',     S.endereco);
+      setText('geoBairroCidade', [S.bairro, S.cidade].filter(Boolean).join(' - ') || '--');
+      setText('geoCoords',       S.lat.toFixed(6) + ', ' + S.lng.toFixed(6));
+      document.querySelectorAll('#geoEndereco,#geoBairroCidade,#geoCoords').forEach(function(el){
+        el.classList.remove('loading');
+      });
+      updateMiniMap(S.lat, S.lng);
+    })
+    .catch(function() { showToast('Erro ao buscar endereco', 'error'); });
 }
 
 function reverseGeocode(lat, lng) {
@@ -1742,6 +1875,7 @@ function resetForm() {
   S.nomeConcorrente = '';
   S.photoBlob = null; S.photoDataUrl = null;
   S.observacoes = '';
+  S.estacoesExistentes = S.estacoesExistentes || [];
 
   // UI reset
   var btn = document.getElementById('gpsBtn');
