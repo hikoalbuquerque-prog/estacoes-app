@@ -156,8 +156,6 @@ img{display:block;max-width:100%}
   gap:0;
 }
 #loginScreen.hidden{display:none}
-#accessScreen{position:fixed;inset:0;z-index:500;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:16px;}
-#accessScreen.hidden{display:none}
 .login-hero{
   width:72px;height:72px;background:var(--accent);border-radius:20px;
   display:flex;align-items:center;justify-content:center;
@@ -564,40 +562,6 @@ textarea.field-input{resize:none;min-height:80px;line-height:1.5}
   <div class="login-footer">Somente usuários autorizados</div>
 </div>
 
-
-<!-- TELA SOLICITAR ACESSO -->
-<div id="accessScreen" class="hidden">
-  <div class="login-hero" style="background:var(--amber)">
-    <svg viewBox="0 0 24 24" style="fill:white;width:40px;height:40px"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
-  </div>
-  <div class="login-title" style="font-size:22px">Acesso não autorizado</div>
-  <div class="login-sub">Seu email não está cadastrado.<br>Solicite acesso ao administrador.</div>
-
-  <div id="accessForm" style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:12px">
-    <div style="display:flex;flex-direction:column;gap:5px">
-      <div style="font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.1em;text-transform:uppercase">Seu nome</div>
-      <input type="text" id="solNome" placeholder="Nome completo"
-        style="padding:13px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:14px;color:var(--txt)">
-    </div>
-    <div style="display:flex;flex-direction:column;gap:5px">
-      <div style="font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.1em;text-transform:uppercase">Cidade de atuação</div>
-      <input type="text" id="solCidade" placeholder="Ex: São Paulo"
-        style="padding:13px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:14px;color:var(--txt)">
-    </div>
-    <button id="solicitarBtn" onclick="enviarSolicitacao()"
-      style="padding:15px;border-radius:10px;background:var(--accent);color:white;font-size:15px;font-weight:600;margin-top:4px">
-      Solicitar acesso
-    </button>
-    <button onclick="voltarLogin()"
-      style="padding:10px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--txt2);font-size:13px">
-      Usar outra conta
-    </button>
-  </div>
-
-  <div id="accessMsg" style="display:none;padding:14px 16px;border-radius:10px;font-size:13px;text-align:center;width:100%;max-width:320px"></div>
-  <div class="login-footer" id="accessEmail" style="margin-top:16px"></div>
-</div>
-
 <!-- APP -->
 <div id="app" class="hidden">
 
@@ -954,15 +918,18 @@ textarea.field-input{resize:none;min-height:80px;line-height:1.5}
 /* -----------------------------------------------------------
    CONFIGURAÇÃO -- alterar antes do deploy
 ----------------------------------------------------------- */
-// ================================================================
-// CONFIGURACAO -- preencher antes do deploy
-// ================================================================
 var CONFIG = {
-  BACKEND_URL:      'https://script.google.com/macros/s/AKfycbzV1R7PTCpE7SvB7uxO4d2N83bZbt0NjQ5d-6kONuv72XTTT5G8Jmg0lgkbOueMnji9/exec',
+  // URL do Google Apps Script WebApp:
+  // Projeto > Implantar > Gerenciar implantações > URL
+  BACKEND_URL: 'https://script.google.com/macros/s/AKfycbzV1R7PTCpE7SvB7uxO4d2N83bZbt0NjQ5d-6kONuv72XTTT5G8Jmg0lgkbOueMnji9/exec',
+
+  // Client ID do Google OAuth 2.0
+  // console.cloud.google.com > APIs & Services > Credentials
   GOOGLE_CLIENT_ID: '337567650924-a16v6esls9fnsu323ndkt1le7abk3pgu.apps.googleusercontent.com',
-  DB_VERSION:       1
+
+  // Versão local do cache (bump para invalidar)
+  DB_VERSION: 1
 };
-// ================================================================
 
 /* -----------------------------------------------------------
    STATE
@@ -1050,68 +1017,49 @@ function dbDelete(store, key) {
 /* -----------------------------------------------------------
    GOOGLE IDENTITY SERVICES AUTH
 ----------------------------------------------------------- */
-/* -- AUTH GOOGLE (GSI popup mode) ----------------------- */
-
 function initGoogleAuth() {
-  // Carrega o SDK do Google Identity Services
+  // Carregar GSI dinamicamente
   var s = document.createElement('script');
   s.src = 'https://accounts.google.com/gsi/client';
   s.onload = function() {
-    // ux_mode:'popup' evita FedCM e funciona dentro do Apps Script
     google.accounts.id.initialize({
-      client_id:    CONFIG.GOOGLE_CLIENT_ID,
-      callback:     handleGoogleCallback,
-      ux_mode:      'popup',
-      auto_select:  false
+      client_id: CONFIG.GOOGLE_CLIENT_ID,
+      callback: handleGoogleCallback,
+      ux_mode: 'popup',
+      auto_select: false
     });
-    showLoginScreen();
+    // Tentar login silencioso primeiro
+    google.accounts.id.prompt(function(notification) {
+      if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+        showLoginScreen();
+      }
+    });
   };
-  s.onerror = function() {
-    showLoginScreen();
-    showLoginError('Falha ao carregar SDK do Google. Verifique a conexao.');
-  };
+  s.onerror = function() { showLoginScreen(); };
   document.head.appendChild(s);
 }
 
 function handleGoogleCallback(response) {
   if (!response || !response.credential) {
-    showLoginError('Falha no login com Google.');
+    showError('Falha no login com Google.');
     return;
   }
   validateWithBackend(response.credential);
 }
 
-  validateWithBackend(response.credential);
-}
-
 function validateWithBackend(tokenId) {
   showLoader('Autenticando...');
-
-  // Decodificar email do JWT sem biblioteca (payload e base64url)
-  var email = '';
-  try {
-    var payload = tokenId.split('.')[1];
-    var padded  = payload + '==='.slice(0, (4 - payload.length % 4) % 4);
-    var decoded = JSON.parse(atob(padded.replace(/-/g,'+').replace(/_/,'/')));
-    email = decoded.email || '';
-  } catch(ex) {}
-
   callBackend('validateUser', { tokenId: tokenId })
     .then(function(res) {
-      hideLoader();
-      if (res.ok) {
-        S.user = res;
-        saveSession(tokenId, res);
-        initApp();
-      } else {
-        // Qualquer erro de auth -> mostrar tela de solicitacao
-        showAccessScreen(email, tokenId);
-      }
+      if (!res.ok) throw new Error(res.error || 'Acesso negado');
+      S.user = res;
+      saveSession(tokenId, res);
+      initApp();
     })
     .catch(function(e) {
       hideLoader();
       showLoginScreen();
-      showLoginError(String(e));
+      showLoginError(e.message);
     });
 }
 
@@ -1140,8 +1088,13 @@ function showLoginError(msg) {
   el.classList.add('visible');
 }
 
-// handler movido para DOMContentLoaded
-
+document.getElementById('googleLoginBtn').onclick = function() {
+  if (typeof google !== 'undefined' && google.accounts) {
+    google.accounts.id.prompt();
+  } else {
+    showLoginError('SDK do Google não carregado. Verifique a conexão.');
+  }
+};
 
 /* -----------------------------------------------------------
    BACKEND -- APPS SCRIPT
@@ -1856,90 +1809,10 @@ function esc(s) {
 }
 function pad(n) { return n < 10 ? '0'+n : n; }
 
-
-/* --- SOLICITAR ACESSO ----------------------------------- */
-var _pendingToken = null;
-var _pendingEmail = null;
-
-function showAccessScreen(email, token) {
-  _pendingEmail = email;
-  _pendingToken = token;
-  document.getElementById('loginScreen').classList.add('hidden');
-  document.getElementById('accessScreen').classList.remove('hidden');
-  document.getElementById('accessEmail').textContent = email;
-  document.getElementById('accessMsg').style.display = 'none';
-}
-
-function voltarLogin() {
-  document.getElementById('accessScreen').classList.add('hidden');
-  document.getElementById('loginScreen').classList.remove('hidden');
-  document.getElementById('loginError').classList.remove('visible');
-}
-
-function enviarSolicitacao() {
-  var nome   = (document.getElementById('solNome').value   || '').trim();
-  var cidade = (document.getElementById('solCidade').value || '').trim();
-
-  if (!nome)   { showToast('Informe seu nome', 'error');   return; }
-  if (!cidade) { showToast('Informe a cidade', 'error');   return; }
-
-  var btn = document.getElementById('solicitarBtn');
-  btn.disabled = true;
-  btn.textContent = 'Enviando...';
-
-  callBackend('solicitarAcesso', {
-    email:  _pendingEmail,
-    nome:   nome,
-    cidade: cidade,
-    pais:   'BR'
-  }).then(function(res) {
-    var msg = document.getElementById('accessMsg');
-    msg.style.display = 'block';
-
-    if (res.ok || res.status === 'JA_PENDENTE') {
-      msg.style.background  = 'rgba(34,197,94,.1)';
-      msg.style.border      = '1px solid rgba(34,197,94,.25)';
-      msg.style.color       = 'var(--green)';
-      msg.textContent       = res.msg || 'Solicitacao enviada com sucesso!';
-      document.getElementById('accessForm').style.display = 'none';
-    } else {
-      msg.style.background = 'rgba(239,68,68,.1)';
-      msg.style.border     = '1px solid rgba(239,68,68,.25)';
-      msg.style.color      = 'var(--red)';
-      msg.textContent      = res.error || 'Erro ao enviar solicitacao.';
-      btn.disabled         = false;
-      btn.textContent      = 'Solicitar acesso';
-    }
-  }).catch(function(e) {
-    showToast('Erro: ' + e, 'error');
-    btn.disabled    = false;
-    btn.textContent = 'Solicitar acesso';
-  });
-}
-
 /* -----------------------------------------------------------
    BOOT
 ----------------------------------------------------------- */
-window.addEventListener('DOMContentLoaded', function() {
-  var loginBtn = document.getElementById('googleLoginBtn');
-  if (loginBtn) {
-    loginBtn.onclick = function() {
-      if (typeof google === 'undefined' || !google.accounts) {
-        showLoginError('SDK ainda carregando, tente novamente.');
-        return;
-      }
-      google.accounts.id.prompt(function(notification) {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          var div = document.createElement('div');
-          loginBtn.parentNode.insertBefore(div, loginBtn.nextSibling);
-          google.accounts.id.renderButton(div, { theme:'outline', size:'large', width:300 });
-          loginBtn.style.display = 'none';
-        }
-      });
-    };
-  }
-  boot();
-});
+window.addEventListener('DOMContentLoaded', boot);
 </script>
 </body>
 </html>
