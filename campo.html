@@ -1026,6 +1026,7 @@ function initGoogleAuth() {
       client_id: CONFIG.GOOGLE_CLIENT_ID,
       callback: handleGoogleCallback,
       ux_mode: 'popup',
+      use_fedcm_for_prompt: false,
       auto_select: false
     });
     // Tentar login silencioso primeiro
@@ -1100,15 +1101,15 @@ document.getElementById('googleLoginBtn').onclick = function() {
    BACKEND -- APPS SCRIPT
 ----------------------------------------------------------- */
 function callBackend(action, payload) {
-  var url = CONFIG.BACKEND_URL + '?action=' + action;
-  return fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload || {})
-  }).then(function(r) {
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  });
+  var body = JSON.stringify(payload || {});
+  var url  = CONFIG.BACKEND_URL
+    + '?action=' + encodeURIComponent(action)
+    + '&d='      + encodeURIComponent(body);
+  return fetch(url, { method: 'GET' })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
 }
 
 /* -----------------------------------------------------------
